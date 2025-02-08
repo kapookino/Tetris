@@ -27,20 +27,20 @@ GameManager game = new GameManager();
 Dictionary<(int,int),Cell> cells = new();
 GridManager grid = new(game, cells);
 InputManager inputManager = new(game, grid);
-Renderer.RenderGrid();
+Renderer renderer = new Renderer(grid);
+renderer.RenderGrid();
 grid.SetCurrentShape(NewShape());
 
-while (true)
-{
+
     grid.SetCurrentShapeCoordinates();
     grid.ActivateShapeCells();
 
     //Task gameTask = Task.Run(() => game.)
     Task inputTask = Task.Run(() => inputManager.InputLoop());
     await Task.WhenAll(inputTask);
-    Renderer.RenderGrid();
+    renderer.RenderGrid();
 
-}
+
 
 
 Shape NewShape()
@@ -328,20 +328,27 @@ public class GridManager
 
     public void ActivateShapeCells()
     {
+        Renderer.RenderDebug($"ActivateShapeCellsCalled", 13);
         for (int i = 0; i < currentShapeCoordinates.Count; i++)
         {
-
-            if (Cell.cells.TryGetValue((currentShapeCoordinates[i][0], currentShapeCoordinates[i][1]), out Cell cell))
+            try
             {
+                Cell cell = GetCell((currentShapeCoordinates[i][0], currentShapeCoordinates[i][1]));
                 cell.Activate(currentShape.shapeColor);
                 shapeCells.Add(cell);
-            }
-            else
+                Renderer.RenderDebug($"shapeCells added", 14);
+            } catch (Exception ex)
             {
-
-                throw new Exception($"Cell not found at coordinate {currentShapeCoordinates[i][0]},{currentShapeCoordinates[i][1]}");
-
+                Renderer.RenderDebug($"Exception caught: {ex.Message}", 15);
+                throw;
+               // throw new Exception($"Cell not found at coordinate {currentShapeCoordinates[i][0]},{currentShapeCoordinates[i][1]}");
             }
+
+          
+          
+
+
+            
 
         }
     }
@@ -439,19 +446,6 @@ public class Cell
 
     }
 
-    public static Cell GetCell((int, int) input)
-    {
-
-
-        if (Cell.cells.TryGetValue(input, out Cell value))
-        {
-            return value;
-        }
-        else
-        {
-            throw new Exception($"No cell found at {input}");
-        }
-    }
    
 
     public static void ResetCells()
@@ -489,11 +483,19 @@ public class Cell
 
 
 
-static class Renderer
+public class Renderer
 {
-    public static (int, int) renderStartLocation { get; private set; } = (0, 0);
+    
 
-    public static void RenderGrid()
+    private GridManager _gridManager;
+
+
+    public Renderer(GridManager gridManager)
+    {
+        _gridManager = gridManager;
+     
+    }
+    public void RenderGrid()
     {
         for (int h = -1; h < Config.renderHeight; h++)
         {
@@ -521,7 +523,7 @@ static class Renderer
                     }
                     else
                     {
-                        RenderCell(Cell.GetCell((w, h)));
+                        RenderCell(_gridManager.GetCell((w, h)));
                     }
 
                 }
@@ -532,7 +534,7 @@ static class Renderer
     }
 
 
-    public static void RenderCell(Cell input)
+    public void RenderCell(Cell input)
     {
         // SetCursor(input.location.Item1, input.location.Item2);
 
@@ -549,7 +551,7 @@ static class Renderer
         }
     }
 
-    static void SetCursor(int x, int y)
+    void SetCursor(int x, int y)
     {
         SetCursorPosition(x, y);
     }
@@ -557,11 +559,11 @@ static class Renderer
     public static void RenderDebug(string text, int line)
     {
         Console.BackgroundColor = ConsoleColor.Black;
-        SetCursor(Config.renderWidth + 5, line);
+        SetCursorPosition(Config.renderWidth + 5, line);
         Console.Write(text);
     }
 
-    public static void RenderControls()
+    public void RenderControls()
     {
         // Needs refactoring to improve flexibility
         Renderer.RenderDebug("Controls", 0);
@@ -618,7 +620,7 @@ public class InputManager
             // TEST CALLS
             _gridManager.SetCurrentShapeCoordinates();
             _gridManager.ActivateShapeCells();
-            Renderer.RenderGrid();
+            //Renderer.RenderGrid();
         }
         catch (Exception ex)
         {
