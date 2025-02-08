@@ -18,31 +18,30 @@
 
 // Shape represents the overarching "tetronomino"
 
+using System.Linq.Expressions;
 using System.Threading.Tasks.Dataflow;
 
 // Initiate 
 Config config = new();
-SetConsoleConfig();
-GridManager grid = new();
+GameManager game = new GameManager();
+Dictionary<(int,int),Cell> cells = new();
+GridManager grid = new(game, cells);
+InputManager inputManager = new(game, grid);
 Renderer.RenderGrid();
 grid.SetCurrentShape(NewShape());
+
 while (true)
 {
-grid.SetCurrentShapeCoordinates();
-grid.ActivateShapeCells();
-Renderer.RenderGrid();
-ConsoleKeyInfo key = Console.ReadKey(intercept: true);
-    grid.MoveDown();
+    grid.SetCurrentShapeCoordinates();
+    grid.ActivateShapeCells();
+
+    //Task gameTask = Task.Run(() => game.)
+    Task inputTask = Task.Run(() => inputManager.InputLoop());
+    await Task.WhenAll(inputTask);
+    Renderer.RenderGrid();
+
 }
 
-
-void SetConsoleConfig()
-{
-    
-    CursorVisible = false;
-    SetBufferSize(Config.bufferWidth, Config.bufferHeight);
-    SetWindowSize(Config.windowWidth, Config.windowHeight);
-}
 
 Shape NewShape()
 {
@@ -58,6 +57,7 @@ Random rand = new Random();
 public class GameManager
 {
     public GameState state {  get; private set; }
+
     public GameManager()
     {
         state = GameState.Start;
@@ -100,7 +100,18 @@ public class Config
     public const int windowHeight = 29 + 100;
     public static int[] startingCellCoordinate { get; private set; } = { 2, 0 };
 
+    public Config()
+    {
+        SetConsoleConfig();
+    }
 
+    void SetConsoleConfig()
+    {
+
+        CursorVisible = false;
+        SetBufferSize(Config.bufferWidth, Config.bufferHeight);
+        SetWindowSize(Config.windowWidth, Config.windowHeight);
+    }
 
 
 }
@@ -255,19 +266,42 @@ public class Shape
 
 }
 
-class GridManager
+public class GridManager
 {
     public int[] spawnCoordinate { get; private set; } = Config.startingCellCoordinate;
     private Shape currentShape { get; set; }
 
     public List<Cell> shapeCells { get; private set; } = new(); // cells that currently contain a part of the Shape
 
-
     private List<int[]> currentShapeCoordinates { get; set; }
-    public GridManager()
+
+    private Dictionary<(int, int), Cell> _cells; // for cell lookup
+
+    private GameManager _gameManager;
+
+   
+
+    public GridManager(GameManager gameManager, Dictionary<(int,int), Cell> cells)
     {
+        _gameManager = gameManager;
+        _cells = cells;
         CreateCells();
-       // Cell.IdentifyNeighbors();
+        Renderer.RenderDebug("GridManager created", 1);
+        
+    }
+
+    public Cell GetCell((int, int) input)
+    {
+
+
+        if (_cells.TryGetValue(input, out Cell value))
+        {
+            return value;
+        }
+        else
+        {
+            throw new Exception($"No cell found at {input}");
+        }
     }
 
     private void DeactivateShapeCells()
@@ -285,28 +319,30 @@ class GridManager
     public void SetCurrentShapeCoordinates()
     {
         currentShapeCoordinates = new List<int[]>();
-        foreach(int[] coordinate in currentShape.coordinateList)
+        foreach (int[] coordinate in currentShape.coordinateList)
         {
-            currentShapeCoordinates.Add(coordinate.Zip(spawnCoordinate,(a, b) => a + b).ToArray());
+            currentShapeCoordinates.Add(coordinate.Zip(spawnCoordinate, (a, b) => a + b).ToArray());
         }
-        
+
     }
 
     public void ActivateShapeCells()
     {
-        for(int i = 0; i < currentShapeCoordinates.Count; i++)
+        for (int i = 0; i < currentShapeCoordinates.Count; i++)
         {
-          
+
             if (Cell.cells.TryGetValue((currentShapeCoordinates[i][0], currentShapeCoordinates[i][1]), out Cell cell))
-                {
-                    cell.Activate(currentShape.shapeColor);
-                    shapeCells.Add(cell);
-                }
+            {
+                cell.Activate(currentShape.shapeColor);
+                shapeCells.Add(cell);
+            }
             else
             {
+
                 throw new Exception($"Cell not found at coordinate {currentShapeCoordinates[i][0]},{currentShapeCoordinates[i][1]}");
+
             }
-            
+
         }
     }
     void CreateCells()
@@ -316,28 +352,58 @@ class GridManager
             for (int j = 0; j < Config.gridHeight; j++)
             {
                 Cell cell = new(i, j);
-                Cell.cells.Add((i, j), cell);
+                _cells.Add((i, j), cell);
             }
         }
     }
 
-    public void MoveRight()
+    // Need to implement check
+
+
+    public void Move(int[] direction)
     {
-        spawnCoordinate[0] = spawnCoordinate[0] + 1;
+
+        if (MoveValidate(direction))
+        {
+
+
+
+        } else
+        {
+            Renderer.RenderDebug("Invalid movement", 10);
+        }
+
+        //  spawnCoordinate[1] = spawnCoordinate[1] + 1;
         DeactivateShapeCells();
     }
 
-    public void MoveLeft()
+    private bool MoveValidate(int[] direction)
     {
-        spawnCoordinate[0] = spawnCoordinate[0] - 1;
-        DeactivateShapeCells();
+        // Validate if within bounds
+        
+        
+            foreach (int[] coordinate in currentShapeCoordinates)
+            {
+                int xResult = coordinate[0] + direction[0];
+                int yResult = coordinate[1] + direction[1];
+
+                if (xResult < 0 || yResult < 0 || xResult > Config.gridWidth || yResult > Config.gridHeight)
+                {
+                    return false;
+                }
+
+
+
+            }
+
+
+
+            return true;
+        
+        
     }
 
-    public void MoveDown()
-    {
-        spawnCoordinate[1] = spawnCoordinate[1] + 1;
-        DeactivateShapeCells();
-    }
+    
 }
 
 public class Cell
@@ -352,7 +418,7 @@ public class Cell
     public static Dictionary<(int, int), Cell> cells = new(); // for cell lookup
     public static List<Cell> startingCells = new(); // Cells selected prior to running game
 
-    private List<Cell> _neighbors = new List<Cell>();
+  
 
 
     public Cell(int x, int y)
@@ -421,9 +487,10 @@ public class Cell
 
 }
 
+
+
 static class Renderer
 {
-
     public static (int, int) renderStartLocation { get; private set; } = (0, 0);
 
     public static void RenderGrid()
@@ -513,17 +580,19 @@ static class Renderer
 public class InputManager
 {
     private GameManager _gameManager { get; set; }
-    public InputManager(GameManager gameManager)
+    private GridManager _gridManager { get; set; }  
+    public InputManager(GameManager gameManager, GridManager gridManager)
     {
         _gameManager = gameManager;
+        _gridManager = gridManager;
     }
     
-    public async Task HandleInputLoop()
+    public async Task InputLoop()
     {
-
+        Renderer.RenderDebug("InputLoop started", 2);
         while (_gameManager.state != GameState.End)
         {
-            Task handleInputTask = HandleInput();
+            Task handleInputTask = ProcessInput();
 
             try
             {
@@ -536,22 +605,20 @@ public class InputManager
         }
     }
 
-    private async Task HandleInput()
+    private async Task ProcessInput()
     {
+        Renderer.RenderDebug("Processinput started", 3);
         try
         {
             ConsoleKeyInfo key = await GetInput();
 
-
-            if (inputDictionary.TryGetValue(key.Key, out var action))
-            {
-                action();
-
-            }
-            else
-            {
-                // Do nothing on invalid input
-            }
+            KeyActionManager keyActionManager = new(_gameManager, _gridManager, key);
+            Renderer.RenderDebug("Past keyactionmanager", 5);
+          
+            // TEST CALLS
+            _gridManager.SetCurrentShapeCoordinates();
+            _gridManager.ActivateShapeCells();
+            Renderer.RenderGrid();
         }
         catch (Exception ex)
         {
@@ -563,6 +630,7 @@ public class InputManager
 
     private async Task<ConsoleKeyInfo> GetInput()
     {
+        Renderer.RenderDebug("GetInput started", 4);
         try
         {
             return await Task.Run(() => Console.ReadKey(intercept: true));
@@ -576,76 +644,75 @@ public class InputManager
 
     }
 
+    public class KeyActionManager
+    {
+        private GameManager _gameManager { get; set; }
+        private GridManager _gridManager { get; set; }
+        public KeyActionManager(GameManager gameManager, GridManager gridManager, ConsoleKeyInfo key)
+        {
+            _gameManager = gameManager;
+            _gridManager = gridManager;
+            ProcessKeyInput(key);
+        }
 
-    // Refactor to move all items to a KeyActionManager class with methods to assign input versus the dictionary
-    private Dictionary<ConsoleKey, Action> inputDictionary = new()
+
+        public void ProcessKeyInput(ConsoleKeyInfo key)
+        {
+            switch(key.Key)
             {
-                  /*  { ConsoleKey.W, () => Select.MoveCursor(Direction.up) },
-                    { ConsoleKey.A, () => grid.Move(Direction.left) },
-                    { ConsoleKey.S, () => grid.Move(Direction.down) },
-                    { ConsoleKey.D, () => grid.Move(Direction.right) },
-                    { ConsoleKey.Spacebar, () => Select.ChooseCurrentCell() },
-                   // { ConsoleKey.Enter, () => KeyActionManager.EnterKey() },
-                    { ConsoleKey.R, () => KeyActionManager.RKey()},
-                    { ConsoleKey.Escape, () => GameManager.SetGameState(GameState.End) },
-                  */
-            };
+                case ConsoleKey.Enter:
+                    EnterKey();
+                    break;
+                    case ConsoleKey.D:
+                    DKey();
+                    break;
+                    case ConsoleKey.A:
+                        AKey(); 
+                    break;
+                default:
+                    break;
+            }
+
+        }
+        public void EnterKey()
+        {
+            switch (_gameManager.state)
+            {
+                case GameState.Select:
+                    //Renderer.SetStartingOffset();
+                    _gameManager.SetGameState(GameState.Run);
+                    break;
+                case GameState.Run:
+                    _gameManager.SetGameState(GameState.Pause);
+                    break;
+                case GameState.Pause:
+                    _gameManager.SetGameState(GameState.Run);
+                    break;
+            }
+        }
+
+        public void RKey()
+        {
+         //   _gridManager.MoveRight();
+        }
+
+        public void DKey()
+        {
+            _gridManager.Move(Direction.right);
+        }
+
+        public void AKey()
+        {
+            _gridManager.Move(Direction.left);
+        }
+    }
 
 }
-public class KeyActionManager
+public static class Direction
 {
-    private GameManager _gameManager { get; set; }
-    public KeyActionManager(GameManager gameManager)
-    {
-        _gameManager = gameManager;
-    }
+        public static readonly int[] up = { 0, -1 };
+        public static readonly int[] down = { 0, 1 };
+        public static readonly int[] left = { -1, 0 };
+        public static readonly int[] right = { 1, 0 };
 
-    public void ProcessKeyInput(ConsoleKeyInfo key)
-    {
-        switch(key.Key)
-        {
-            case ConsoleKey.Enter:
-                EnterKey();
-                break;
-                case ConsoleKey.D:
-                DKey();
-                break;
-            default:
-                break;
-        }
-
-    }
-    public void EnterKey()
-    {
-        switch (_gameManager.state)
-        {
-            case GameState.Select:
-                //Renderer.SetStartingOffset();
-                _gameManager.SetGameState(GameState.Run);
-                break;
-            case GameState.Run:
-                _gameManager.SetGameState(GameState.Pause);
-                break;
-            case GameState.Pause:
-                _gameManager.SetGameState(GameState.Run);
-                break;
-        }
-    }
-
-    public void RKey()
-    {
-        _gameManager.SetGameState(GameState.Reset);
-    }
-
-    public void DKey()
-    {
-        _gameManager.SetGameState(GameState.Reset);
-    }
 }
-    public static class Direction
-    {
-        public static (int, int) up = (0, -1);
-        public static (int, int) down = (0, 1);
-        public static (int, int) left = (-1, 0);
-        public static (int, int) right = (1, 0);
-    }
