@@ -28,17 +28,15 @@ Dictionary<(int,int),Cell> cells = new();
 GridManager grid = new(game, cells);
 InputManager inputManager = new(game, grid);
 Renderer renderer = new Renderer(grid);
-renderer.RenderGrid();
 grid.SetCurrentShape(NewShape());
 
 
-    grid.SetCurrentShapeCoordinates();
-    grid.ActivateShapeCells();
 
-    //Task gameTask = Task.Run(() => game.)
+    Task TempRendererTask = Task.Run(() => TempRenderer());
     Task inputTask = Task.Run(() => inputManager.InputLoop());
-    await Task.WhenAll(inputTask);
+    await Task.WhenAll(inputTask, TempRendererTask);
     renderer.RenderGrid();
+
 
 
 
@@ -53,6 +51,18 @@ int GetRandomShapeType()
 Random rand = new Random();
     int randomShape = rand.Next(0,Enum.GetValues(typeof(ShapeType)).Length);
     return randomShape;
+}
+
+async Task TempRenderer()
+{
+    while (true)
+    {
+        grid.DeactivateShapeCells();
+    grid.SetCurrentShapeCoordinates();
+    grid.ActivateShapeCells();
+        renderer.RenderGrid();
+        Thread.Sleep(100);
+    }
 }
 public class GameManager
 {
@@ -88,6 +98,15 @@ public enum ShapeType
     J,
     L
 }
+
+public enum MoveOption
+{
+    Move,
+    Bounds,
+    Freeze
+}
+
+
 public class Config
 {
     public const int gridWidth = 10;
@@ -304,7 +323,7 @@ public class GridManager
         }
     }
 
-    private void DeactivateShapeCells()
+    public void DeactivateShapeCells()
     {
         foreach (Cell cell in shapeCells)
         {
@@ -334,7 +353,7 @@ public class GridManager
             try
             {
                 Cell cell = GetCell((currentShapeCoordinates[i][0], currentShapeCoordinates[i][1]));
-                cell.Activate(currentShape.shapeColor);
+                cell.Activate(currentShape.shapeColor, currentShape);
                 shapeCells.Add(cell);
                 Renderer.RenderDebug($"shapeCells added", 14);
             } catch (Exception ex)
@@ -343,13 +362,6 @@ public class GridManager
                 throw;
                // throw new Exception($"Cell not found at coordinate {currentShapeCoordinates[i][0]},{currentShapeCoordinates[i][1]}");
             }
-
-          
-          
-
-
-            
-
         }
     }
     void CreateCells()
@@ -369,43 +381,69 @@ public class GridManager
 
     public void Move(int[] direction)
     {
+        // need to create an enum to manage shape movement options
+        // Values could be: Move, Bounds, Set
 
-        if (MoveValidate(direction))
+
+
+        switch(MoveValidate(direction))
         {
-
-
-
-        } else
+            case MoveOption.Move:
+                Renderer.RenderDebug("Move", 12);
+                spawnCoordinate[0] = spawnCoordinate[0] + direction[0];
+                spawnCoordinate[1] = spawnCoordinate[1] + direction[1];
+            break;
+                case MoveOption.Bounds:
+                Renderer.RenderDebug("Bounds", 12);
+                break;
+                case MoveOption.Freeze:
+                Renderer.RenderDebug("Freeze", 12);
+                break;
+        } 
         {
-            Renderer.RenderDebug("Invalid movement", 10);
         }
 
-        //  spawnCoordinate[1] = spawnCoordinate[1] + 1;
-        DeactivateShapeCells();
+        
     }
 
-    private bool MoveValidate(int[] direction)
+    private MoveOption MoveValidate(int[] direction)
     {
         // Validate if within bounds
-        
-        
+            int i = 0;
+        //Renderer.RenderDebug("MoveValidate Reached", 11);
             foreach (int[] coordinate in currentShapeCoordinates)
             {
+                i++;
                 int xResult = coordinate[0] + direction[0];
                 int yResult = coordinate[1] + direction[1];
+                Renderer.RenderDebug($"Result: {xResult}, {yResult} ", 6+i);
 
-                if (xResult < 0 || yResult < 0 || xResult > Config.gridWidth || yResult > Config.gridHeight)
+            // Validate that movement is within the grid, other than at the bottom
+            if (xResult < 0 || yResult < 0 || xResult == Config.gridWidth)
                 {
-                    return false;
+                
+                return MoveOption.Bounds;
                 }
+            // If movement is to bottom on grid, set a flag 
+            if (yResult == Config.gridHeight)
+            {
+                return MoveOption.Freeze;
+            }
+                Cell checkCell = GetCell((xResult, yResult));
 
 
+
+            if (checkCell.Active && !checkCell.hasShape)
+            {
+                
+                return MoveOption.Freeze;
+            }
 
             }
 
 
 
-            return true;
+            return MoveOption.Move;
         
         
     }
@@ -418,14 +456,12 @@ public class Cell
     public (int, int) location { get; private set; } // location on grid
     public (int, int)? renderLocation { get; private set; } // location rendered 
     public bool Active { get; private set; } = false;
-    public bool hasSelector { get; private set; } = false;
+    public bool hasShape { get; private set; } = false;
     public static ConsoleColor defaultCellColor = ConsoleColor.Black;
     public ConsoleColor cellColor { get; private set; } = defaultCellColor;
 
     public static Dictionary<(int, int), Cell> cells = new(); // for cell lookup
     public static List<Cell> startingCells = new(); // Cells selected prior to running game
-
-  
 
 
     public Cell(int x, int y)
@@ -434,35 +470,26 @@ public class Cell
     }
 
     // may need to change the active 
-    public void Activate(ConsoleColor input = ConsoleColor.Black)
+    public void Activate(ConsoleColor input = ConsoleColor.Black, Shape shape = null)
     {
         Active = true;
         cellColor = input;
+        if (shape != null)
+        {
+            hasShape = true;
+        }
+        else
+        {
+            hasShape = false;
+        }
     }
 
     public void Deactivate()
     {
         Active = false;
+        cellColor = defaultCellColor;
+        hasShape = false;
 
-    }
-
-   
-
-    public static void ResetCells()
-    {
-
-        foreach (Cell cell in Cell.cells.Values)
-        {
-            if (Cell.startingCells.Contains(cell))
-            {
-                cell.Activate();
-            }
-            else
-            {
-                cell.Deactivate();
-            }
-
-        }
     }
 
     public override bool Equals(object obj)
@@ -481,15 +508,10 @@ public class Cell
 
 }
 
-
-
 public class Renderer
 {
-    
-
+   
     private GridManager _gridManager;
-
-
     public Renderer(GridManager gridManager)
     {
         _gridManager = gridManager;
@@ -539,16 +561,15 @@ public class Renderer
         // SetCursor(input.location.Item1, input.location.Item2);
 
 
-        if (input.Active)
-        {
+    
             Console.BackgroundColor = input.cellColor;
-            Console.Write(" ");
-        }
-        else
+            Console.Write(".");
+        
+       /* else
         {
             Console.BackgroundColor = ConsoleColor.Black;
             Console.Write(".");
-        }
+        } */
     }
 
     void SetCursor(int x, int y)
@@ -577,8 +598,6 @@ public class Renderer
 
     }
 }
-
-
 public class InputManager
 {
     private GameManager _gameManager { get; set; }
@@ -618,8 +637,8 @@ public class InputManager
             Renderer.RenderDebug("Past keyactionmanager", 5);
           
             // TEST CALLS
-            _gridManager.SetCurrentShapeCoordinates();
-            _gridManager.ActivateShapeCells();
+        //    _gridManager.SetCurrentShapeCoordinates();
+          //  _gridManager.ActivateShapeCells();
             //Renderer.RenderGrid();
         }
         catch (Exception ex)
@@ -671,6 +690,9 @@ public class InputManager
                     case ConsoleKey.A:
                         AKey(); 
                     break;
+                case ConsoleKey.S:
+                    SKey();
+                    break;
                 default:
                     break;
             }
@@ -706,6 +728,11 @@ public class InputManager
         public void AKey()
         {
             _gridManager.Move(Direction.left);
+        }
+
+        public void SKey()
+        {
+            _gridManager.Move(Direction.down);
         }
     }
 
