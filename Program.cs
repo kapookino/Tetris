@@ -83,6 +83,8 @@ public enum GameState
     Start,
     Select,
     Run,
+    Freeze,
+    CheckRow,
     ClearRow,
     Pause,
     Reset,
@@ -353,7 +355,7 @@ public class GridManager
             try
             {
                 Cell cell = GetCell((currentShapeCoordinates[i][0], currentShapeCoordinates[i][1]));
-                cell.Activate(currentShape.shapeColor, currentShape);
+                cell.Activate(currentShape);
                 shapeCells.Add(cell);
                 Renderer.RenderDebug($"shapeCells added", 14);
             } catch (Exception ex)
@@ -397,13 +399,18 @@ public class GridManager
                 Renderer.RenderDebug("Bounds", 12);
                 break;
                 case MoveOption.Freeze:
+                FreezeShape();
                 Renderer.RenderDebug("Freeze", 12);
                 break;
         } 
-        {
-        }
+        
 
         
+    }
+
+    private void FreezeShape()
+    {
+
     }
 
     private MoveOption MoveValidate(int[] direction)
@@ -418,37 +425,36 @@ public class GridManager
                 int yResult = coordinate[1] + direction[1];
                 Renderer.RenderDebug($"Result: {xResult}, {yResult} ", 6+i);
 
-            // Validate that movement is within the grid, other than at the bottom
-            if (xResult < 0 || yResult < 0 || xResult == Config.gridWidth)
-                {
+                // Validate that movement is within the grid, other than at the bottom
+                if (xResult < 0 || yResult < 0 || xResult == Config.gridWidth)
+                    {
                 
-                return MoveOption.Bounds;
+                    return MoveOption.Bounds;
+                    }
+                // If movement is to bottom on grid, set a flag 
+                if (yResult == Config.gridHeight)
+                {
+                    return MoveOption.Freeze;
                 }
-            // If movement is to bottom on grid, set a flag 
-            if (yResult == Config.gridHeight)
-            {
-                return MoveOption.Freeze;
-            }
+                
                 Cell checkCell = GetCell((xResult, yResult));
 
+                if (checkCell.Active && checkCell.shape != currentShape)
+                {
+                    if (direction[0] != 0)
+                    {
+                    return MoveOption.Bounds;
 
+                    }
+                    else
+                    {
+                        return MoveOption.Freeze;
+                    }
+                }
 
-            if (checkCell.Active && !checkCell.hasShape)
-            {
-                
-                return MoveOption.Freeze;
             }
-
-            }
-
-
-
             return MoveOption.Move;
-        
-        
     }
-
-    
 }
 
 public class Cell
@@ -456,7 +462,13 @@ public class Cell
     public (int, int) location { get; private set; } // location on grid
     public (int, int)? renderLocation { get; private set; } // location rendered 
     public bool Active { get; private set; } = false;
-    public bool hasShape { get; private set; } = false;
+    
+    // REFACTOR TO REFERENCE AN EXISTING SHAPE, then add to shapes the ability to equate shapes
+  
+
+    public Shape? shape { get; private set; }
+
+
     public static ConsoleColor defaultCellColor = ConsoleColor.Black;
     public ConsoleColor cellColor { get; private set; } = defaultCellColor;
 
@@ -470,25 +482,21 @@ public class Cell
     }
 
     // may need to change the active 
-    public void Activate(ConsoleColor input = ConsoleColor.Black, Shape shape = null)
+    public void Activate(Shape shapeInput)
     {
         Active = true;
-        cellColor = input;
-        if (shape != null)
-        {
-            hasShape = true;
-        }
-        else
-        {
-            hasShape = false;
-        }
+        cellColor = shapeInput.shapeColor;
+            
+            shape = shapeInput;
+
     }
 
     public void Deactivate()
     {
         Active = false;
         cellColor = defaultCellColor;
-        hasShape = false;
+        
+        shape = null;
 
     }
 
