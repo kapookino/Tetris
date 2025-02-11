@@ -18,76 +18,243 @@
 
 // Shape represents the overarching "tetronomino"
 
+using System;
 using System.Linq.Expressions;
 using System.Threading.Tasks.Dataflow;
 
-// Initiate 
+// Initiatilize services and dependencies
+
 Config config = new();
-GameManager game = new GameManager();
-Dictionary<(int,int),Cell> cells = new();
+GameManager game = new();
+Dictionary<(int, int), Cell> cells = new();
 GridManager grid = new(game, cells);
+game.AddGrid(grid);
+Renderer renderer = new(grid);
+FrameManager frameManager = new(game, renderer);
 InputManager inputManager = new(game, grid);
-Renderer renderer = new Renderer(grid);
-grid.SetCurrentShape(NewShape());
+
+// The game itself runs via two Async Tasks, frameManagerTask which refreshes the game and renderer 
+// at a set rate and processes actions added to a ConcurrentQueue. inputTask which handles receiving input and translating 
+// that input into actions, which are added to the the ConcurrentQueue. The queue ensures all actions
+// are processed in the appropriate order with thread safety. 
 
 
+Task frameManagerTask = Task.Run(() => frameManager.RunGame());
+Task inputTask = Task.Run(() => inputManager.InputLoop());
+await Task.WhenAll(inputTask, frameManagerTask);
 
-    Task TempRendererTask = Task.Run(() => TempRenderer());
-    Task inputTask = Task.Run(() => inputManager.InputLoop());
-    await Task.WhenAll(inputTask, TempRendererTask);
-    renderer.RenderGrid();
-
-
-
-
-
-Shape NewShape()
-{
-    return new Shape((ShapeType)GetRandomShapeType());
-}
-
-int GetRandomShapeType()
-{
-Random rand = new Random();
-    int randomShape = rand.Next(0,Enum.GetValues(typeof(ShapeType)).Length);
-    return randomShape;
-}
-
-async Task TempRenderer()
-{
-    while (true)
-    {
-        grid.DeactivateShapeCells();
-    grid.SetCurrentShapeCoordinates();
-    grid.ActivateShapeCells();
-        renderer.RenderGrid();
-        Thread.Sleep(100);
-    }
-}
 public class GameManager
 {
     public GameState state {  get; private set; }
+
+    public GridManager _gridManager {  get; private set; }
+
+    private int currentFrame;
 
     public GameManager()
     {
         state = GameState.Start;
     }
+    public void AddGrid(GridManager grid)
+    {
+        _gridManager = grid;
+    }
+    public void SetCurrentFrame(int input)
+    {
+        currentFrame = input;
+    }
     public void SetGameState(GameState stateInput)
     {
         state = stateInput;
     }
+
+    private Shape NewShape()
+    {
+        Renderer.RenderDebug("NewShape Called", 16);
+        return new Shape((ShapeType)GetRandomShapeType());
+    }
+
+    private int GetRandomShapeType()
+    {
+        Random rand = new Random();
+        int randomShape = rand.Next(0, Enum.GetValues(typeof(ShapeType)).Length);
+        return randomShape;
+    }
+
+
+    public void StateDecisions(int currentFrame)
+    {
+        SetCurrentFrame(currentFrame);
+        switch(state)
+        {
+            case GameState.Start:
+                Start();
+                break;
+            case GameState.Spawn:
+                Spawn();
+                break;
+            case GameState.Movement:
+                Movement();
+                break;
+            case GameState.Freeze:
+                Freeze();
+                break;
+            case GameState.ClearRow:
+                break;
+            case GameState.Pause:
+                break;
+            case GameState.End:
+                break;
+            default:
+                break;
+        }
+    }
+
+    private void Start()
+    {
+        // clear existing items
+        /*
+        try
+        {
+            _gridManager.ClearCurrentShape();
+        } catch (Exception ex)
+        {
+            Renderer.RenderDebug($"Error: {ex}", 15);
+        }
+        */
+        _gridManager.SetSpawnCoordinate(Config.startingCellCoordinate);
+
+
+        SetGameState(GameState.Spawn);
+
+    }
+
+    private void Spawn()
+    {
+        try
+        {
+            Shape shape = NewShape();
+            _gridManager.SetCurrentShape(shape);
+        }
+        catch (Exception ex)
+        {
+            Renderer.RenderDebug($"Error: {ex}", 16);
+        }
+
+        // change state
+        
+        SetGameState(GameState.Movement);
+
+    }
+
+    private void Movement()
+    {
+        _gridManager.DeactivateShapeCells();
+        _gridManager.SetCurrentShapeCoordinates();
+        _gridManager.ActivateShapeCells();
+        // handle input actions
+
+
+        // every x frame, move shape down. TO IMPLEMENT: DIFFICULTY LEVELS BY EDITING THE FRAME TIMING
+
+        if(currentFrame % 3 == 0)
+        {
+            _gridManager.Move(Direction.down);
+        }
+
+        // repeat or change state
+    }
+
+    private void Freeze()
+    {
+        // Stop shape
+        try
+        {
+            _gridManager.ClearCurrentShape();
+        }
+        catch (Exception ex)
+        {
+            Renderer.RenderDebug($"Error: {ex}", 15);
+        }
+
+        SetGameState(GameState.Start);
+        // Add points
+
+        // check row clear, change state
+
+    }
+
+    private void RowClear()
+    {
+        // Row Clear animation
+        
+        // shift cells
+
+        // add points
+
+        // 
+    }
+
+    private void Pause()
+    {
+        // Unpause
+
+        // New Game
+    }
+
+    private void End()
+    {
+
+    }
+
+
 }
+
+// This class 
+public class FrameManager
+{
+    const int frameRate = 60;
+    public int currentFrame {  get; private set; } = 1;
+
+    private GameManager _gameManager;
+
+    private Renderer _renderer;
+    public FrameManager(GameManager gameManager, Renderer renderer)
+    {
+        _gameManager = gameManager;
+        _renderer = renderer;
+    }
+
+    private void IncrementFrame()
+    {
+        currentFrame++;
+    }
+
+    public async Task RunGame()
+    {
+        while (_gameManager.state != GameState.End)
+        {
+            _renderer.RenderGrid();
+            _gameManager.StateDecisions(currentFrame);
+            await Task.Delay(frameRate);
+            IncrementFrame();
+            Renderer.RenderDebug($"{currentFrame}", 16);
+            
+        }
+    }
+
+}
+
+
 
 public enum GameState
 {
     Start,
-    Select,
-    Run,
+    Spawn,
+    Movement,
     Freeze,
-    CheckRow,
     ClearRow,
     Pause,
-    Reset,
     End
 }
 public enum ShapeType
@@ -107,7 +274,6 @@ public enum MoveOption
     Bounds,
     Freeze
 }
-
 
 public class Config
 {
@@ -289,8 +455,8 @@ public class Shape
 
 public class GridManager
 {
-    public int[] spawnCoordinate { get; private set; } = Config.startingCellCoordinate;
-    private Shape currentShape { get; set; }
+    public int[] spawnCoordinate { get; private set; }
+    private Shape? currentShape { get; set; } = null;
 
     public List<Cell> shapeCells { get; private set; } = new(); // cells that currently contain a part of the Shape
 
@@ -300,21 +466,23 @@ public class GridManager
 
     private GameManager _gameManager;
 
-   
 
-    public GridManager(GameManager gameManager, Dictionary<(int,int), Cell> cells)
+
+    public GridManager(GameManager gameManager, Dictionary<(int, int), Cell> cells)
     {
         _gameManager = gameManager;
         _cells = cells;
         CreateCells();
         Renderer.RenderDebug("GridManager created", 1);
-        
+
     }
 
+    public void SetSpawnCoordinate(int[] input)
+    {
+        spawnCoordinate = input;
+    }
     public Cell GetCell((int, int) input)
     {
-
-
         if (_cells.TryGetValue(input, out Cell value))
         {
             return value;
@@ -324,7 +492,12 @@ public class GridManager
             throw new Exception($"No cell found at {input}");
         }
     }
-
+    public void ClearCurrentShape()
+    {
+        currentShape = null;   
+        shapeCells.Clear();
+        currentShapeCoordinates.Clear();            
+    }
     public void DeactivateShapeCells()
     {
         foreach (Cell cell in shapeCells)
@@ -376,24 +549,19 @@ public class GridManager
                 _cells.Add((i, j), cell);
             }
         }
+        Renderer.RenderDebug("CreateCells Finished", 5);
     }
-
-    // Need to implement check
-
 
     public void Move(int[] direction)
     {
-        // need to create an enum to manage shape movement options
-        // Values could be: Move, Bounds, Set
-
-
 
         switch(MoveValidate(direction))
         {
             case MoveOption.Move:
+
+
                 Renderer.RenderDebug("Move", 12);
-                spawnCoordinate[0] = spawnCoordinate[0] + direction[0];
-                spawnCoordinate[1] = spawnCoordinate[1] + direction[1];
+                SetSpawnCoordinate(new int[] { spawnCoordinate[0] + direction[0], spawnCoordinate[1] + direction[1] });
             break;
                 case MoveOption.Bounds:
                 Renderer.RenderDebug("Bounds", 12);
@@ -403,14 +571,11 @@ public class GridManager
                 Renderer.RenderDebug("Freeze", 12);
                 break;
         } 
-        
-
-        
     }
 
     private void FreezeShape()
     {
-
+        _gameManager.SetGameState(GameState.Freeze);
     }
 
     private MoveOption MoveValidate(int[] direction)
@@ -462,6 +627,8 @@ public class Cell
     public (int, int) location { get; private set; } // location on grid
     public (int, int)? renderLocation { get; private set; } // location rendered 
     public bool Active { get; private set; } = false;
+
+    public bool renderFlag { get; private set; } = true;
     
     // REFACTOR TO REFERENCE AN EXISTING SHAPE, then add to shapes the ability to equate shapes
   
@@ -487,17 +654,23 @@ public class Cell
         Active = true;
         cellColor = shapeInput.shapeColor;
             
-            shape = shapeInput;
-
+        shape = shapeInput;
+        SetRenderFlag(true);
     }
 
     public void Deactivate()
     {
         Active = false;
         cellColor = defaultCellColor;
-        
         shape = null;
+        SetRenderFlag(true);
 
+
+    }
+
+    public void SetRenderFlag(bool input)
+    {
+        renderFlag = input;
     }
 
     public override bool Equals(object obj)
@@ -553,7 +726,20 @@ public class Renderer
                     }
                     else
                     {
-                        RenderCell(_gridManager.GetCell((w, h)));
+                        try
+                        {
+                            Cell cell = _gridManager.GetCell((w, h));
+                            if (cell.renderFlag)
+                            {
+                                RenderCell(cell);
+                                cell.SetRenderFlag(false);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Renderer.RenderDebug($"Cannot render cell {w},{h}",20);
+                        }
+
                     }
 
                 }
@@ -699,7 +885,7 @@ public class InputManager
                         AKey(); 
                     break;
                 case ConsoleKey.S:
-                    SKey();
+               //     SKey();
                     break;
                 default:
                     break;
@@ -710,15 +896,15 @@ public class InputManager
         {
             switch (_gameManager.state)
             {
-                case GameState.Select:
+                case GameState.Spawn:
                     //Renderer.SetStartingOffset();
-                    _gameManager.SetGameState(GameState.Run);
+                    _gameManager.SetGameState(GameState.Movement);
                     break;
-                case GameState.Run:
+                case GameState.Movement:
                     _gameManager.SetGameState(GameState.Pause);
                     break;
                 case GameState.Pause:
-                    _gameManager.SetGameState(GameState.Run);
+                    _gameManager.SetGameState(GameState.Movement);
                     break;
             }
         }
@@ -730,11 +916,13 @@ public class InputManager
 
         public void DKey()
         {
+            Renderer.RenderDebug("D Key input", 17);
             _gridManager.Move(Direction.right);
         }
 
         public void AKey()
         {
+            Renderer.RenderDebug("A Key input", 17);
             _gridManager.Move(Direction.left);
         }
 
