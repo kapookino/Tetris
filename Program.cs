@@ -19,19 +19,13 @@
 // Shape represents the overarching "tetronomino"
 
 using System;
+using System.Data;
 using System.Linq.Expressions;
 using System.Threading.Tasks.Dataflow;
+using System.Transactions;
 
 // Initiatilize services and dependencies
 
-Config config = new();
-GameManager game = new();
-Dictionary<(int, int), Cell> cells = new();
-GridManager grid = new(game, cells);
-game.AddGrid(grid);
-Renderer renderer = new(grid);
-FrameManager frameManager = new(game, renderer);
-InputManager inputManager = new(game, grid);
 
 // The game itself runs via two Async Tasks, frameManagerTask which refreshes the game and renderer 
 // at a set rate and processes actions added to a ConcurrentQueue. inputTask which handles receiving input and translating 
@@ -39,26 +33,318 @@ InputManager inputManager = new(game, grid);
 // are processed in the appropriate order with thread safety. 
 
 
-Task frameManagerTask = Task.Run(() => frameManager.RunGame());
-Task inputTask = Task.Run(() => inputManager.InputLoop());
-await Task.WhenAll(inputTask, frameManagerTask);
+
+
+Game game = new();
+await game.RunGame();
+// IMPLEMENT A STATE MACHINE AND INTERFACE
+
+public class Game
+{
+    Config config;
+    GameManager gameManager;
+    Renderer renderer;
+    FrameManager frameManager;
+    InputManager inputManager;
+
+    public Game()
+    {
+        config = new();
+        gameManager = new();
+        renderer = new(gameManager._gridManager);
+        frameManager = new(gameManager, renderer);
+        inputManager = new(gameManager, gameManager._gridManager);
+    }
+
+    public async Task RunGame()
+    {
+        Task frameManagerTask = Task.Run(() => frameManager.RunGame());
+        Task inputTask = Task.Run(() => inputManager.InputLoop());
+        await Task.WhenAll(inputTask, frameManagerTask);
+    }
+}
+
+#region State Machine and State Classes
+public interface IGameState
+{
+    void Enter();
+    void Update(int currentFrame);
+    void Exit();
+    void HandleInput();
+}
+
+public class StateMachine
+{
+    private IGameState _currentState;
+    private readonly Dictionary<GameState,IGameState> states;
+    private readonly GameManager _gameManager;
+
+    public StateMachine(GameManager gameManager)
+    {
+        _gameManager = gameManager;
+        states = new()
+        {
+            { GameState.Start, new StartState(gameManager) },
+            { GameState.Spawn, new SpawnState(gameManager) },
+            { GameState.Movement, new MovementState(gameManager) },
+            { GameState.Freeze, new FreezeState(gameManager) },
+            { GameState.ClearRow, new ClearRowState(gameManager) },
+            { GameState.Pause, new PauseState(gameManager) },
+            { GameState.End, new EndState(gameManager) }
+        };
+        _currentState = states[GameState.Start];
+        _currentState.Enter();
+    }
+
+    public void TransitionTo(GameState state)
+    {
+        _currentState?.Exit();
+        _currentState = states[state];
+        _currentState.Enter();
+        _gameManager.SetGameState(state);  
+
+    }
+
+    public void Update(int currentFrame)
+    {
+        _currentState.Update(currentFrame);
+    }
+}
+
+public class StartState : IGameState
+{
+    private readonly GameManager _gameManager;
+    public StartState(GameManager gameManager)
+    {
+        _gameManager = gameManager;
+    }
+    public void Enter()
+    {
+       // _gameManager._gridManager.SetSpawnCoordinate(Config.startingCellCoordinate);
+    }
+    public void Update(int currentFrame)
+    {
+        _gameManager.stateMachine.TransitionTo(GameState.Spawn);
+    }
+
+    public void Exit()
+    {
+
+    }
+
+    public void HandleInput()
+    {
+
+    }
+}
+
+public class SpawnState : IGameState
+{
+    private readonly GameManager _gameManager;
+    public SpawnState(GameManager gameManager)
+    {
+        _gameManager = gameManager;
+    }
+    public void Enter()
+    {
+
+        try
+        {
+            _gameManager._gridManager.SetSpawnCoordinate(Config.startingCellCoordinate);
+            Shape shape = _gameManager.NewShape();
+            _gameManager._gridManager.SetCurrentShape(shape);
+        }
+        catch (Exception ex)
+        {
+            Renderer.RenderDebug($"Error: {ex}", 16);
+        }
+
+        _gameManager.stateMachine.TransitionTo(GameState.Movement);
+    }
+    public void Update(int currentFrame)
+    {
+
+    }
+
+    public void Exit()
+    {
+        
+    }
+
+    public void HandleInput()
+    {
+
+    }
+}
+
+public class MovementState : IGameState
+{
+    private readonly GameManager _gameManager;
+    public MovementState(GameManager gameManager)
+    {
+        _gameManager = gameManager;
+    }
+    public void Enter()
+    {
+
+    }
+    public void Update(int currentFrame)
+    {
+        try
+        {
+
+        _gameManager._gridManager.DeactivateShapeCells();
+        _gameManager._gridManager.SetCurrentShapeCoordinates();
+        _gameManager._gridManager.ActivateShapeCells();
+        } catch (Exception ex)
+        {
+            Renderer.RenderDebug($"movement update: {ex}", 21);
+        }
+
+        if (currentFrame % 3 == 0)
+        {
+            _gameManager._gridManager.Move(Direction.Down.ToArray());
+        }
+    }
+
+    public void Exit()
+    {
+
+    }
+
+    public void HandleInput()
+    {
+
+    }
+}
+public class FreezeState : IGameState
+{
+    private readonly GameManager _gameManager;
+    public FreezeState(GameManager gameManager)
+    {
+        _gameManager = gameManager;
+    }
+    public void Enter()
+    {
+        _gameManager._gridManager.ClearCurrentShape();
+    }
+    public void Update(int currentFrame)
+    {
+        if (currentFrame % 3 == 0) {
+            _gameManager.stateMachine.TransitionTo(GameState.Spawn);
+        }
+
+    }
+
+    public void Exit()
+    {
+
+    }
+
+    public void HandleInput()
+    {
+
+    }
+}
+
+public class ClearRowState : IGameState
+{
+    private readonly GameManager _gameManager;
+    public ClearRowState(GameManager gameManager)
+    {
+        _gameManager = gameManager;
+    }
+    public void Enter()
+    {
+
+    }
+    public void Update(int currentFrame)
+    {
+
+    }
+
+    public void Exit()
+    {
+
+    }
+
+    public void HandleInput()
+    {
+
+    }
+}
+
+public class PauseState : IGameState
+{
+    private readonly GameManager _gameManager;
+    public PauseState(GameManager gameManager)
+    {
+        _gameManager = gameManager;
+    }
+    public void Enter()
+    {
+
+    }
+    public void Update(int currentFrame)
+    {
+
+    }
+
+    public void Exit()
+    {
+
+    }
+
+    public void HandleInput()
+    {
+
+    }
+}
+public class EndState : IGameState
+{
+    private readonly GameManager _gameManager;
+    public EndState(GameManager gameManager)
+    {
+        _gameManager = gameManager;
+    }
+    public void Enter()
+    {
+
+    }
+    public void Update(int currentFrame)
+    {
+
+    }
+
+    public void Exit()
+    {
+
+    }
+
+    public void HandleInput()
+    {
+
+    }
+}
+
+#endregion
 
 public class GameManager
 {
     public GameState state {  get; private set; }
 
     public GridManager _gridManager {  get; private set; }
-
+    public StateMachine stateMachine { get; private set; }
+  
     private int currentFrame;
 
     public GameManager()
     {
-        state = GameState.Start;
+        _gridManager = new GridManager(this);
+        stateMachine = new(this);
+
     }
-    public void AddGrid(GridManager grid)
-    {
-        _gridManager = grid;
-    }
+
     public void SetCurrentFrame(int input)
     {
         currentFrame = input;
@@ -68,7 +354,7 @@ public class GameManager
         state = stateInput;
     }
 
-    private Shape NewShape()
+    public Shape NewShape()
     {
         Renderer.RenderDebug("NewShape Called", 16);
         return new Shape((ShapeType)GetRandomShapeType());
@@ -79,90 +365,6 @@ public class GameManager
         Random rand = new Random();
         int randomShape = rand.Next(0, Enum.GetValues(typeof(ShapeType)).Length);
         return randomShape;
-    }
-
-
-    public void StateDecisions(int currentFrame)
-    {
-        SetCurrentFrame(currentFrame);
-        switch(state)
-        {
-            case GameState.Start:
-                Start();
-                break;
-            case GameState.Spawn:
-                Spawn();
-                break;
-            case GameState.Movement:
-                Movement();
-                break;
-            case GameState.Freeze:
-                Freeze();
-                break;
-            case GameState.ClearRow:
-                break;
-            case GameState.Pause:
-                break;
-            case GameState.End:
-                break;
-            default:
-                break;
-        }
-    }
-
-    private void Start()
-    {
-        // clear existing items
-        /*
-        try
-        {
-            _gridManager.ClearCurrentShape();
-        } catch (Exception ex)
-        {
-            Renderer.RenderDebug($"Error: {ex}", 15);
-        }
-        */
-        _gridManager.SetSpawnCoordinate(Config.startingCellCoordinate);
-
-
-        SetGameState(GameState.Spawn);
-
-    }
-
-    private void Spawn()
-    {
-        try
-        {
-            Shape shape = NewShape();
-            _gridManager.SetCurrentShape(shape);
-        }
-        catch (Exception ex)
-        {
-            Renderer.RenderDebug($"Error: {ex}", 16);
-        }
-
-        // change state
-        
-        SetGameState(GameState.Movement);
-
-    }
-
-    private void Movement()
-    {
-        _gridManager.DeactivateShapeCells();
-        _gridManager.SetCurrentShapeCoordinates();
-        _gridManager.ActivateShapeCells();
-        // handle input actions
-
-
-        // every x frame, move shape down. TO IMPLEMENT: DIFFICULTY LEVELS BY EDITING THE FRAME TIMING
-
-        if(currentFrame % 3 == 0)
-        {
-            _gridManager.Move(Direction.down);
-        }
-
-        // repeat or change state
     }
 
     private void Freeze()
@@ -235,10 +437,11 @@ public class FrameManager
         while (_gameManager.state != GameState.End)
         {
             _renderer.RenderGrid();
-            _gameManager.StateDecisions(currentFrame);
+            //_gameManager.StateDecisions(currentFrame);
+            _gameManager.stateMachine.Update(currentFrame);
             await Task.Delay(frameRate);
             IncrementFrame();
-            Renderer.RenderDebug($"{currentFrame}", 16);
+            Renderer.RenderDebug($"{currentFrame}", 20);
             
         }
     }
@@ -302,6 +505,8 @@ public class Config
 
 
 }
+
+// REFACTOR SHAPES INTO SUBCLASSES
 public class Shape
 {
     public ConsoleColor shapeColor { get; private set; }
@@ -462,16 +667,13 @@ public class GridManager
 
     private List<int[]> currentShapeCoordinates { get; set; }
 
-    private Dictionary<(int, int), Cell> _cells; // for cell lookup
+    private Dictionary<(int, int), Cell> _cells = new(); // for cell lookup
 
-    private GameManager _gameManager;
+    readonly GameManager _gameManager;
 
-
-
-    public GridManager(GameManager gameManager, Dictionary<(int, int), Cell> cells)
+    public GridManager(GameManager gameManager)
     {
         _gameManager = gameManager;
-        _cells = cells;
         CreateCells();
         Renderer.RenderDebug("GridManager created", 1);
 
@@ -567,16 +769,12 @@ public class GridManager
                 Renderer.RenderDebug("Bounds", 12);
                 break;
                 case MoveOption.Freeze:
-                FreezeShape();
+                _gameManager.stateMachine.TransitionTo(GameState.Freeze);
                 Renderer.RenderDebug("Freeze", 12);
                 break;
         } 
     }
 
-    private void FreezeShape()
-    {
-        _gameManager.SetGameState(GameState.Freeze);
-    }
 
     private MoveOption MoveValidate(int[] direction)
     {
@@ -692,7 +890,7 @@ public class Cell
 public class Renderer
 {
    
-    private GridManager _gridManager;
+    readonly GridManager _gridManager;
     public Renderer(GridManager gridManager)
     {
         _gridManager = gridManager;
@@ -766,7 +964,7 @@ public class Renderer
         } */
     }
 
-    void SetCursor(int x, int y)
+    private void SetCursor(int x, int y)
     {
         SetCursorPosition(x, y);
     }
@@ -917,27 +1115,37 @@ public class InputManager
         public void DKey()
         {
             Renderer.RenderDebug("D Key input", 17);
-            _gridManager.Move(Direction.right);
+            _gridManager.Move(Direction.Right.ToArray());
         }
 
         public void AKey()
         {
             Renderer.RenderDebug("A Key input", 17);
-            _gridManager.Move(Direction.left);
+            _gridManager.Move(Direction.Left.ToArray());
         }
 
         public void SKey()
         {
-            _gridManager.Move(Direction.down);
+            _gridManager.Move(Direction.Down.ToArray());
         }
     }
 
 }
-public static class Direction
+public readonly struct Direction
 {
-        public static readonly int[] up = { 0, -1 };
-        public static readonly int[] down = { 0, 1 };
-        public static readonly int[] left = { -1, 0 };
-        public static readonly int[] right = { 1, 0 };
+    public int X { get; }
+    public int Y { get; }
 
+    private Direction(int x, int y)
+    {
+        X = x;
+        Y = y;
+    }
+
+    public static readonly Direction Up = new(0, -1);
+    public static readonly Direction Down = new(0, 1);
+    public static readonly Direction Left = new(-1, 0);
+    public static readonly Direction Right = new(1, 0);
+
+    public int[] ToArray() => new int[] { X, Y };
 }
