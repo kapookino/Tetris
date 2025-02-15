@@ -100,6 +100,7 @@ public class StateMachine
     {
         _currentState?.Exit();
         _currentState = states[state];
+        Renderer.RenderDebug($"Transitioning to {_currentState}", 25);
         _currentState.Enter();
         _gameManager.SetGameState(state);  
 
@@ -147,22 +148,16 @@ public class SpawnState : IGameState
     }
     public void Enter()
     {
-
-        try
-        {
             _gameManager._gridManager.SetSpawnCoordinate(Config.startingCellCoordinate);
             Shape shape = _gameManager.NewShape();
             _gameManager._gridManager.SetCurrentShape(shape);
-        }
-        catch (Exception ex)
-        {
-            Renderer.RenderDebug($"Error: {ex}", 16);
-        }
+       
 
-        _gameManager.stateMachine.TransitionTo(GameState.Movement);
+
     }
     public void Update(int currentFrame)
     {
+        _gameManager.stateMachine.TransitionTo(GameState.Movement);
 
     }
 
@@ -195,7 +190,10 @@ public class MovementState : IGameState
 
         _gameManager._gridManager.DeactivateShapeCells();
         _gameManager._gridManager.SetCurrentShapeCoordinates();
+
         _gameManager._gridManager.ActivateShapeCells();
+            
+            
         } catch (Exception ex)
         {
             Renderer.RenderDebug($"movement update: {ex}", 21);
@@ -227,12 +225,21 @@ public class FreezeState : IGameState
     public void Enter()
     {
         _gameManager._gridManager.ClearCurrentShape();
+
+        // check row
     }
     public void Update(int currentFrame)
     {
-        if (currentFrame % 3 == 0) {
-            _gameManager.stateMachine.TransitionTo(GameState.Spawn);
+        if (_gameManager._gridManager.CheckClearRow())
+        {
+            _gameManager.stateMachine.TransitionTo(GameState.ClearRow);
         }
+        else
+        {
+            _gameManager.stateMachine.TransitionTo(GameState.Spawn);
+
+        }
+        
 
     }
 
@@ -256,16 +263,19 @@ public class ClearRowState : IGameState
     }
     public void Enter()
     {
-
+        _gameManager._gridManager.ClearRows();
+        _gameManager._gridManager.ShiftDown();
     }
     public void Update(int currentFrame)
     {
 
+
+        _gameManager.stateMachine.TransitionTo(GameState.Spawn);
     }
 
     public void Exit()
     {
-
+        _gameManager._gridManager.EmptyRowsToClear();
     }
 
     public void HandleInput()
@@ -358,6 +368,7 @@ public class GameManager
     {
         Renderer.RenderDebug("NewShape Called", 16);
         return new Shape((ShapeType)GetRandomShapeType());
+     //   return new Shape(ShapeType.O);
     }
 
     private int GetRandomShapeType()
@@ -366,56 +377,12 @@ public class GameManager
         int randomShape = rand.Next(0, Enum.GetValues(typeof(ShapeType)).Length);
         return randomShape;
     }
-
-    private void Freeze()
-    {
-        // Stop shape
-        try
-        {
-            _gridManager.ClearCurrentShape();
-        }
-        catch (Exception ex)
-        {
-            Renderer.RenderDebug($"Error: {ex}", 15);
-        }
-
-        SetGameState(GameState.Start);
-        // Add points
-
-        // check row clear, change state
-
-    }
-
-    private void RowClear()
-    {
-        // Row Clear animation
-        
-        // shift cells
-
-        // add points
-
-        // 
-    }
-
-    private void Pause()
-    {
-        // Unpause
-
-        // New Game
-    }
-
-    private void End()
-    {
-
-    }
-
-
 }
 
 // This class 
 public class FrameManager
 {
-    const int frameRate = 60;
+    const int frameRate = 50;
     public int currentFrame {  get; private set; } = 1;
 
     private GameManager _gameManager;
@@ -444,6 +411,8 @@ public class FrameManager
             Renderer.RenderDebug($"{currentFrame}", 20);
             
         }
+
+        Renderer.RenderDebug($"You lose!", 20);
     }
 
 }
@@ -488,7 +457,7 @@ public class Config
     public const int bufferWidth = 29+100;
     public const int windowWidth = 29 + 100;
     public const int windowHeight = 29 + 100;
-    public static int[] startingCellCoordinate { get; private set; } = { 2, 0 };
+    public static int[] startingCellCoordinate { get; private set; } = { 0, 0 };
 
     public Config()
     {
@@ -665,6 +634,9 @@ public class GridManager
 
     public List<Cell> shapeCells { get; private set; } = new(); // cells that currently contain a part of the Shape
 
+    public List<Row> rows { get; private set; } = new();
+
+    public List<Row> rowsToClear { get; private set; } = new();
     private List<int[]> currentShapeCoordinates { get; set; }
 
     private Dictionary<(int, int), Cell> _cells = new(); // for cell lookup
@@ -724,36 +696,43 @@ public class GridManager
 
     public void ActivateShapeCells()
     {
-        Renderer.RenderDebug($"ActivateShapeCellsCalled", 13);
+        
         for (int i = 0; i < currentShapeCoordinates.Count; i++)
         {
             try
             {
                 Cell cell = GetCell((currentShapeCoordinates[i][0], currentShapeCoordinates[i][1]));
+
                 cell.Activate(currentShape);
                 shapeCells.Add(cell);
                 Renderer.RenderDebug($"shapeCells added", 14);
+              
             } catch (Exception ex)
             {
                 Renderer.RenderDebug($"Exception caught: {ex.Message}", 15);
                 throw;
                // throw new Exception($"Cell not found at coordinate {currentShapeCoordinates[i][0]},{currentShapeCoordinates[i][1]}");
+            
             }
         }
+
+
     }
     void CreateCells()
     {
-        for (int i = 0; i < Config.gridWidth; i++)
+        for (int i = 0; i < Config.gridHeight; i++)
         {
-            for (int j = 0; j < Config.gridHeight; j++)
+            Row row = new Row(i);
+            rows.Add(row);
+            for (int j = 0; j < Config.gridWidth; j++)
             {
-                Cell cell = new(i, j);
-                _cells.Add((i, j), cell);
+                Cell cell = new(j, i);
+                _cells.Add((j, i), cell);
+                row.addCell(cell);
             }
         }
         Renderer.RenderDebug("CreateCells Finished", 5);
     }
-
     public void Move(int[] direction)
     {
 
@@ -774,8 +753,6 @@ public class GridManager
                 break;
         } 
     }
-
-
     private MoveOption MoveValidate(int[] direction)
     {
         // Validate if within bounds
@@ -802,7 +779,7 @@ public class GridManager
                 
                 Cell checkCell = GetCell((xResult, yResult));
 
-                if (checkCell.Active && checkCell.shape != currentShape)
+                if (checkCell.HasShape() && checkCell.shape != currentShape)
                 {
                     if (direction[0] != 0)
                     {
@@ -818,7 +795,90 @@ public class GridManager
             }
             return MoveOption.Move;
     }
-}
+
+    public bool CheckClearRow()
+    {
+
+        foreach(Row row in rows)
+        {
+            int i = 0;
+            foreach(Cell cell in row.cells)
+            {
+                bool check = cell.HasShape();
+                if (check)
+                {
+                    i++;
+                    Renderer.RenderDebug($"i: {i}", 25);
+                }
+            }
+            if(i == Config.gridWidth)
+            {
+                rowsToClear.Add(row);
+            }
+        }
+
+        if(rowsToClear.Count > 0)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    public void ClearRows() { 
+        foreach(Row row in rowsToClear)
+        {
+//            row.ClearRow();
+        }
+    }
+
+    public void ShiftDown()
+    {
+      //  for(int i = rowsToClear.Count - 1; i >= 0; i--)
+        for (int i = 0; i < rowsToClear.Count; i++)
+            {
+            Row clearRow = rowsToClear[i];
+            int clearRowNumber = clearRow.y;
+            
+            
+       
+            for(int j = rows.Count - 1; j >= 0; j--)
+            {
+                Row row = rows[j];
+                if(row.y > clearRow.y)
+                {
+                    continue;
+                } 
+                else if(row.y == 0)
+                {
+                     foreach (Cell cell in row.cells)
+                    {
+                        cell.Deactivate();
+                    }
+                }
+                else
+                {
+                    foreach (Cell cell in row.cells)
+                    {
+                        Cell copyCell = GetCell(((cell.location.Item1), cell.location.Item2 - 1));
+                        cell.CopyAttributes(copyCell);
+                        copyCell.Deactivate();
+                        
+                    }
+                }
+
+            }
+        }
+    }
+
+    
+
+    public void EmptyRowsToClear()
+        {
+            rowsToClear.Clear();
+        }
+
+    }
 
 public class Cell
 {
@@ -826,11 +886,9 @@ public class Cell
     public (int, int)? renderLocation { get; private set; } // location rendered 
     public bool Active { get; private set; } = false;
 
+
     public bool renderFlag { get; private set; } = true;
     
-    // REFACTOR TO REFERENCE AN EXISTING SHAPE, then add to shapes the ability to equate shapes
-  
-
     public Shape? shape { get; private set; }
 
 
@@ -844,6 +902,7 @@ public class Cell
     public Cell(int x, int y)
     {
         location = (x, y);
+        
     }
 
     // may need to change the active 
@@ -859,8 +918,7 @@ public class Cell
     public void Deactivate()
     {
         Active = false;
-        cellColor = defaultCellColor;
-        shape = null;
+        ClearCell();
         SetRenderFlag(true);
 
 
@@ -870,6 +928,8 @@ public class Cell
     {
         renderFlag = input;
     }
+
+
 
     public override bool Equals(object obj)
     {
@@ -885,6 +945,64 @@ public class Cell
         return location.GetHashCode();
     }
 
+    public bool HasShape()
+    {
+        return shape != null;
+    }
+
+    public void ClearShape()
+    {
+        shape = null;
+
+    }
+
+    public void ClearCell()
+    {
+        ClearShape();
+        ResetCellColor();
+
+    }
+
+    private void ResetCellColor()
+    {
+        cellColor = defaultCellColor;
+    }
+
+    public void CopyAttributes(Cell cell)
+    {
+        shape = cell.shape;
+        cellColor = cell.cellColor;
+        SetRenderFlag(true);
+
+    }
+
+}
+
+public class Row
+{
+    public int y { get; private set; }
+
+    public List<Cell> cells;
+
+    public Row(int input)
+    {
+        y = input;
+        cells = new List<Cell>();
+
+    }
+
+    public void addCell(Cell cell)
+    {
+        cells.Add(cell);
+    }
+
+    public void ClearRow()
+    {
+        foreach (Cell cell in cells)
+        {
+            cell.Deactivate();
+        }
+    }
 }
 
 public class Renderer
@@ -898,9 +1016,9 @@ public class Renderer
     }
     public void RenderGrid()
     {
-        for (int h = -1; h < Config.renderHeight; h++)
+        for (int h = -1; h < Config.gridHeight; h++)
         {
-            for (int w = -1; w < Config.renderWidth; w++)
+            for (int w = -1; w < Config.gridWidth; w++)
             {
                 Console.BackgroundColor = ConsoleColor.Black;
                 SetCursor(w + 1, h + 1);
@@ -929,13 +1047,29 @@ public class Renderer
                             Cell cell = _gridManager.GetCell((w, h));
                             if (cell.renderFlag)
                             {
-                                RenderCell(cell);
-                                cell.SetRenderFlag(false);
+                                try
+                                {
+                                    RenderCell(cell); 
+                                }
+                                catch
+                                {
+
+                                    Renderer.RenderDebug($"Cannot render cell {w},{h}", 20);
+                                }
+                                try
+                                {
+                                    cell.SetRenderFlag(false);
+                                }
+                                catch
+                                {
+                                    Renderer.RenderDebug($"Cannot set render flag {w},{h}", 21);
+                                }
+
                             }
                         }
                         catch (Exception ex)
                         {
-                            Renderer.RenderDebug($"Cannot render cell {w},{h}",20);
+                           
                         }
 
                     }
