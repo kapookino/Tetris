@@ -368,7 +368,7 @@ public class GameManager
     {
         Renderer.RenderDebug("NewShape Called", 16);
         return new Shape((ShapeType)GetRandomShapeType());
-     //   return new Shape(ShapeType.O);
+        return new Shape(ShapeType.S);
     }
 
     private int GetRandomShapeType()
@@ -480,16 +480,29 @@ public class Shape
 {
     public ConsoleColor shapeColor { get; private set; }
     public int[] coordinates { get; private set; }
-    public int[] pivotCoordinate { get; private set; }
-    public List<int[]> coordinateList { get; private set; }
-    public List<Cell> cells { get; private set; } 
+    public List<int[]>? coordinateList { get; private set; }
+    public Dictionary<int, List<int[]>> coordinateDictionary { get; private set; }
     public ShapeType shapeType { get; private set; }
+
+    public int rotation { get; private set; }
+
+
     public Shape(ShapeType input)
     {
         // Populate initial coordinates and color
-        
+        Renderer.RenderDebug("Shape constructor called", 27);
         shapeType = input;
-        ShapeFactory(shapeType);       
+        rotation = 0;
+        ShapeFactory(shapeType);
+        coordinateList = new List<int[]>();
+        if (coordinateDictionary.TryGetValue(rotation, out List <int[]> output)){
+            Renderer.RenderDebug("rotation found", 28);
+            coordinateList = output;
+        }
+        else
+        {
+            Renderer.RenderDebug("rotation not found", 28);
+        }
     }
 
     private void ShapeFactory(ShapeType shapeType)
@@ -532,105 +545,133 @@ public class Shape
 
     }
 
+    public void NextRotation()
+    {
+        if(rotation + 1 == coordinateDictionary.Count)
+        {
+            rotation = 0;
+        }
+        else
+        {
+            rotation += 1;
+        }
+
+        if (coordinateDictionary.TryGetValue(rotation, out List<int[]> output))
+        {
+            Renderer.RenderDebug("rotation found", 28);
+            coordinateList = output;
+        }
+        else
+        {
+            Renderer.RenderDebug("rotation not found", 26);
+        }
+    }
+
     #region Shape Definitions
     private void CreateIShape()
     {
         shapeColor = ConsoleColor.Cyan;
-        coordinateList = new()
+
+
+        coordinateDictionary = new()
         {
-            new int[] { 0, 0 },
-            new int[] { 0, 1 },
-            new int[] { 0, 2 },
-            new int[] { 0, 3 },
+            { 0, new() { new[] { 0, 1 }, new[] { 1, 1 }, new[] { 2, 1 }, new[] { 3, 1 } } },
+            { 1, new() { new[] { 3, 0 }, new[] { 3, 1 }, new[] { 3, 2 }, new[] { 3, 3 } } },
+            { 2, new() { new[] { 0, 3 }, new[] { 1, 3 }, new[] { 2, 3 }, new[] { 3, 3 } } },
+            { 3, new() { new[] { 1, 0 }, new[] { 1, 1 }, new[] { 1, 2 }, new[] { 1, 3 } } }
         };
-        pivotCoordinate = new int[]{ 0, 1 };
     }
 
      private void CreateOShape()
     {
         shapeColor = ConsoleColor.Yellow;
-        coordinateList = new()
+        coordinateDictionary = new()
         {
-            new int[] { 0, 0 },
-            new int[] { 1, 0 },
-            new int[] { 0, 1 },
-            new int[] { 1, 1 },
+            { 0, new() { new[] { 1, 0 }, new[] { 2, 0 }, new[] { 1, 1 }, new[] { 2,1 } } },
+
         };
-        pivotCoordinate = new int[] { 0, 0 };
+
     }
 
     private void CreateTShape()
     {
         shapeColor = ConsoleColor.Magenta;
-        coordinateList = new()
+        coordinateDictionary = new()
         {
-            new int[] { 0, 0 },
-            new int[] { 1, 0 },
-            new int[] { 2, 0 },
-            new int[] { 1, 1 },
+            { 0, new() { new[] { 1, 0 }, new[] { 0, 1 }, new[] { 1, 1 }, new[] { 2, 1 } } },
+            { 1, new() { new[] { 1, 0 }, new[] { 1, 1 }, new[] { 1, 2 }, new[] { 2, 1 } } },
+            { 2, new() { new[] { 0, 1 }, new[] { 1, 1 }, new[] { 2, 1 }, new[] { 1, 2 } } },
+            { 3, new() { new[] { 0, 1 }, new[] { 1, 0 }, new[] { 1, 1 }, new[] { 1, 2 } } }
         };
-        pivotCoordinate = new int[] { 1, 0 };
+
     }
 
     private void CreateSShape()
     {
         shapeColor = ConsoleColor.Green;
-        coordinateList = new()
+        coordinateDictionary = new()
         {
-            new int[] { 0, 1 },
-            new int[] { 1, 1 },
-            new int[] { 1, 0 },
-            new int[] { 2, 0 },
+            { 0, new() { new[] { 1, 0 }, new[] { 2, 0 }, new[] { 0, 1 }, new[] { 1, 1 } } },
+            { 1, new() { new[] { 1, 0 }, new[] { 1, 1 }, new[] { 2, 1 }, new[] { 2, 2 } } },
+            { 2, new() { new[] { 0, 2 }, new[] { 1, 1 }, new[] { 1, 2 }, new[] { 2, 1 } } },
+            { 3, new() { new[] { 0, 0 }, new[] { 0, 1 }, new[] { 1, 1 }, new[] { 1, 2 } } }
         };
-        pivotCoordinate = new int[] { 1, 1 };
+
     }
 
     private void CreateZShape()
     {
         shapeColor = ConsoleColor.Red;
-        coordinateList = new()
+        coordinateDictionary = new()
         {
-            new int[] { 0, 0 },
-            new int[] { 1, 0 },
-            new int[] { 1, 1 },
-            new int[] { 2, 1 },
+            { 0, new() { new[] { 0, 0 }, new[] { 1, 0 }, new[] { 1, 1 }, new[] { 2, 1 } } },
+            { 1, new() { new[] { 1, 1 }, new[] { 1, 2 }, new[] { 2, 0 }, new[] { 2, 1 } } },
+            { 2, new() { new[] { 0, 1 }, new[] { 1, 1 }, new[] { 1, 2 }, new[] { 2, 2 } } },
+            { 3, new() { new[] { 0, 1 }, new[] { 0, 2 }, new[] { 1, 1 }, new[] { 1, 0 } } }
         };
-        pivotCoordinate = new int[] { 1, 1 };
+
     }
 
     private void CreateJShape()
     {
         shapeColor = ConsoleColor.Blue;
-        coordinateList = new()
+        coordinateDictionary = new()
         {
-            new int[] { 1, 0 },
-            new int[] { 1, 1 },
-            new int[] { 1, 2 },
-            new int[] { 0, 2 },
+            { 0, new() { new[] { 0, 0 }, new[] { 0, 1 }, new[] { 1, 1 }, new[] { 2, 1 } } },
+            { 1, new() { new[] { 1, 0 }, new[] { 1, 1 }, new[] { 1, 2 }, new[] { 2, 0 } } },
+            { 2, new() { new[] { 0, 1 }, new[] { 1, 1 }, new[] { 2, 1 }, new[] { 2, 2 } } },
+            { 3, new() { new[] { 0, 2 }, new[] { 1, 0 }, new[] { 1, 1 }, new[] { 1, 2 } } }
         };
-        pivotCoordinate = new int[] { 1, 2 };
+
     }
 
     private void CreateLShape()
     {
         shapeColor = ConsoleColor.White;
-        coordinateList = new()
+        coordinateDictionary = new()
         {
-            new int[] { 0, 0 },
-            new int[] { 0, 1 },
-            new int[] { 0, 2 },
-            new int[] { 1, 2 },
+            { 0, new() { new[] { 0, 1 }, new[] { 1, 1 }, new[] { 2, 1 }, new[] { 2, 0 } } },
+            { 1, new() { new[] { 1, 0 }, new[] { 1, 1 }, new[] { 1, 2 }, new[] { 2, 2 } } },
+            { 2, new() { new[] { 0, 1 }, new[] { 0, 2 }, new[] { 1, 1 }, new[] { 2, 1 } } },
+            { 3, new() { new[] { 0, 0 }, new[] { 1, 0 }, new[] { 1, 1 }, new[] { 1, 2 } } }
         };
-        pivotCoordinate = new int[] { 0, 2 };
+
     }
-#endregion
 
 }
+
+public class OShape
+{
+    
+}
+
+
+#endregion
 
 public class GridManager
 {
     public int[] spawnCoordinate { get; private set; }
-    private Shape? currentShape { get; set; } = null;
+    public Shape? currentShape { get; private set; } = null;
 
     public List<Cell> shapeCells { get; private set; } = new(); // cells that currently contain a part of the Shape
 
@@ -1216,8 +1257,8 @@ public class InputManager
                     case ConsoleKey.A:
                         AKey(); 
                     break;
-                case ConsoleKey.S:
-               //     SKey();
+                case ConsoleKey.W:
+                    WKey();
                     break;
                 default:
                     break;
@@ -1241,9 +1282,9 @@ public class InputManager
             }
         }
 
-        public void RKey()
+        public void WKey()
         {
-         //   _gridManager.MoveRight();
+            _gridManager.currentShape.NextRotation();
         }
 
         public void DKey()
