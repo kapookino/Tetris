@@ -21,6 +21,7 @@
 using System;
 using System.Data;
 using System.Linq.Expressions;
+using System.Security.Cryptography;
 using System.Threading.Tasks.Dataflow;
 using System.Transactions;
 
@@ -33,27 +34,25 @@ using System.Transactions;
 // are processed in the appropriate order with thread safety. 
 
 
+Config config = new();
+GameData gameData = new();
+GameManager gameManager = new(gameData);
+Renderer renderer = new(gameManager._gridManager, gameData);
+FrameManager frameManager = frameManager = new(gameManager, renderer);
+InputManager inputManager = new(gameManager, gameManager._gridManager);
 
-
-Game game = new();
+Game game = new(frameManager, inputManager);
 await game.RunGame();
 // IMPLEMENT A STATE MACHINE AND INTERFACE
 
 public class Game
 {
-    Config config;
-    GameManager gameManager;
-    Renderer renderer;
-    FrameManager frameManager;
-    InputManager inputManager;
-
-    public Game()
+    FrameManager frameManager {  get; set; }
+    InputManager inputManager { get; set; }
+    public Game(FrameManager inputFrameManager, InputManager inputInputManager)
     {
-        config = new();
-        gameManager = new();
-        renderer = new(gameManager._gridManager);
-        frameManager = new(gameManager, renderer);
-        inputManager = new(gameManager, gameManager._gridManager);
+        frameManager = inputFrameManager;
+        inputManager = inputInputManager;
     }
 
     public async Task RunGame()
@@ -224,6 +223,15 @@ public class FreezeState : IGameState
     }
     public void Enter()
     {
+        try
+        {
+        _gameManager.gameData.IncrementShapeCounts(_gameManager._gridManager.currentShape.shapeType);
+
+        } catch (Exception ex)
+        {
+            Renderer.RenderDebug( $"Increment Shape count failed: {ex}", 15);
+        }
+
         _gameManager._gridManager.ClearCurrentShape();
 
         // check row
@@ -263,12 +271,13 @@ public class ClearRowState : IGameState
     }
     public void Enter()
     {
+        _gameManager.gameData.ScoreRows(_gameManager._gridManager.rowsToClear.Count);
         _gameManager._gridManager.ClearRows();
         _gameManager._gridManager.ShiftDown();
     }
     public void Update(int currentFrame)
     {
-
+                                                                                                                                                                                                                       
 
         _gameManager.stateMachine.TransitionTo(GameState.Spawn);
     }
@@ -345,20 +354,19 @@ public class GameManager
 
     public GridManager _gridManager {  get; private set; }
     public StateMachine stateMachine { get; private set; }
-  
+    
+    public GameData gameData { get; private set; }
+
     private int currentFrame;
 
-    public GameManager()
+    public GameManager(GameData input)
     {
+        gameData = input;
         _gridManager = new GridManager(this);
         stateMachine = new(this);
 
     }
 
-    public void SetCurrentFrame(int input)
-    {
-        currentFrame = input;
-    }
     public void SetGameState(GameState stateInput)
     {
         state = stateInput;
@@ -366,7 +374,6 @@ public class GameManager
 
     public Shape NewShape()
     {
-        Renderer.RenderDebug("NewShape Called", 16);
         return new Shape((ShapeType)GetRandomShapeType());
         return new Shape(ShapeType.S);
     }
@@ -403,12 +410,13 @@ public class FrameManager
     {
         while (_gameManager.state != GameState.End)
         {
+            _renderer.RenderGameData();
             _renderer.RenderGrid();
             //_gameManager.StateDecisions(currentFrame);
             _gameManager.stateMachine.Update(currentFrame);
             await Task.Delay(frameRate);
             IncrementFrame();
-            Renderer.RenderDebug($"{currentFrame}", 20);
+
             
         }
 
@@ -453,11 +461,11 @@ public class Config
     public const int gridHeight = 20;
     public const int renderWidth = 10;
     public const int renderHeight = 20;
-    public const int bufferHeight = 29+100;
-    public const int bufferWidth = 29+100;
-    public const int windowWidth = 29 + 100;
-    public const int windowHeight = 29 + 100;
-    public static int[] startingCellCoordinate { get; private set; } = { 0, 0 };
+    public const int bufferHeight = 129;
+    public const int bufferWidth = 129;
+    public const int windowWidth = 129;
+    public const int windowHeight = 129;
+    public static int[] startingCellCoordinate { get; private set; } = { 3, 0 };
 
     public Config()
     {
@@ -490,18 +498,18 @@ public class Shape
     public Shape(ShapeType input)
     {
         // Populate initial coordinates and color
-        Renderer.RenderDebug("Shape constructor called", 27);
+
         shapeType = input;
         rotation = 0;
         ShapeFactory(shapeType);
         coordinateList = new List<int[]>();
         if (coordinateDictionary.TryGetValue(rotation, out List <int[]> output)){
-            Renderer.RenderDebug("rotation found", 28);
+
             coordinateList = output;
         }
         else
         {
-            Renderer.RenderDebug("rotation not found", 28);
+
         }
     }
 
@@ -545,25 +553,17 @@ public class Shape
 
     }
 
-    public void NextRotation()
+    public void SetRotation(int input)
     {
-        if(rotation + 1 == coordinateDictionary.Count)
+        if (coordinateDictionary.TryGetValue(input, out List<int[]> output))
         {
-            rotation = 0;
-        }
-        else
-        {
-            rotation += 1;
-        }
 
-        if (coordinateDictionary.TryGetValue(rotation, out List<int[]> output))
-        {
-            Renderer.RenderDebug("rotation found", 28);
             coordinateList = output;
+            rotation = input;
         }
         else
         {
-            Renderer.RenderDebug("rotation not found", 26);
+
         }
     }
 
@@ -657,17 +657,9 @@ public class Shape
         };
 
     }
-
-}
-
-public class OShape
-{
-    
-}
-
-
 #endregion
 
+}
 public class GridManager
 {
     public int[] spawnCoordinate { get; private set; }
@@ -688,7 +680,7 @@ public class GridManager
     {
         _gameManager = gameManager;
         CreateCells();
-        Renderer.RenderDebug("GridManager created", 1);
+
 
     }
 
@@ -709,9 +701,9 @@ public class GridManager
     }
     public void ClearCurrentShape()
     {
-        currentShape = null;   
+        currentShape = null;
         shapeCells.Clear();
-        currentShapeCoordinates.Clear();            
+        currentShapeCoordinates.Clear();
     }
     public void DeactivateShapeCells()
     {
@@ -737,7 +729,7 @@ public class GridManager
 
     public void ActivateShapeCells()
     {
-        
+
         for (int i = 0; i < currentShapeCoordinates.Count; i++)
         {
             try
@@ -746,14 +738,14 @@ public class GridManager
 
                 cell.Activate(currentShape);
                 shapeCells.Add(cell);
-                Renderer.RenderDebug($"shapeCells added", 14);
-              
+
+
             } catch (Exception ex)
             {
                 Renderer.RenderDebug($"Exception caught: {ex.Message}", 15);
                 throw;
-               // throw new Exception($"Cell not found at coordinate {currentShapeCoordinates[i][0]},{currentShapeCoordinates[i][1]}");
-            
+                // throw new Exception($"Cell not found at coordinate {currentShapeCoordinates[i][0]},{currentShapeCoordinates[i][1]}");
+
             }
         }
 
@@ -772,93 +764,117 @@ public class GridManager
                 row.addCell(cell);
             }
         }
-        Renderer.RenderDebug("CreateCells Finished", 5);
+
     }
     public void Move(int[] direction)
     {
 
-        switch(MoveValidate(direction))
+        switch (MoveValidate(direction))
         {
             case MoveOption.Move:
 
 
-                Renderer.RenderDebug("Move", 12);
+
                 SetSpawnCoordinate(new int[] { spawnCoordinate[0] + direction[0], spawnCoordinate[1] + direction[1] });
-            break;
-                case MoveOption.Bounds:
-                Renderer.RenderDebug("Bounds", 12);
                 break;
-                case MoveOption.Freeze:
+            case MoveOption.Bounds:
+
+                break;
+            case MoveOption.Freeze:
                 _gameManager.stateMachine.TransitionTo(GameState.Freeze);
-                Renderer.RenderDebug("Freeze", 12);
+
                 break;
-        } 
+        }
     }
     private MoveOption MoveValidate(int[] direction)
     {
         // Validate if within bounds
-            int i = 0;
+        int i = 0;
         //Renderer.RenderDebug("MoveValidate Reached", 11);
-            foreach (int[] coordinate in currentShapeCoordinates)
-            {
-                i++;
-                int xResult = coordinate[0] + direction[0];
-                int yResult = coordinate[1] + direction[1];
-                Renderer.RenderDebug($"Result: {xResult}, {yResult} ", 6+i);
+        foreach (int[] coordinate in currentShapeCoordinates)
+        {
+            i++;
+            int xResult = coordinate[0] + direction[0];
+            int yResult = coordinate[1] + direction[1];
 
-                // Validate that movement is within the grid, other than at the bottom
-                if (xResult < 0 || yResult < 0 || xResult == Config.gridWidth)
-                    {
-                
+
+            // Validate that movement is within the grid, other than at the bottom
+            if (xResult < 0 || yResult < 0 || xResult == Config.gridWidth)
+            {
+
+                return MoveOption.Bounds;
+            }
+            // If movement is to bottom on grid, set a flag 
+            if (yResult == Config.gridHeight)
+            {
+                return MoveOption.Freeze;
+            }
+
+            bool cellMoveValidity = CheckCellMoveValidity(xResult, yResult);
+
+
+            Cell checkCell = GetCell((xResult, yResult));
+
+            if (!cellMoveValidity)
+                //checkCell.HasShape() && checkCell.shape != currentShape)
+            {
+                if (direction[0] != 0)
+                {
                     return MoveOption.Bounds;
-                    }
-                // If movement is to bottom on grid, set a flag 
-                if (yResult == Config.gridHeight)
+
+                }
+                else
                 {
                     return MoveOption.Freeze;
                 }
-                
-                Cell checkCell = GetCell((xResult, yResult));
-
-                if (checkCell.HasShape() && checkCell.shape != currentShape)
-                {
-                    if (direction[0] != 0)
-                    {
-                    return MoveOption.Bounds;
-
-                    }
-                    else
-                    {
-                        return MoveOption.Freeze;
-                    }
-                }
-
             }
-            return MoveOption.Move;
+
+        }
+        return MoveOption.Move;
     }
+
+    public bool CheckCellMoveValidity(int xInput, int yInput)
+    {
+        try
+        {
+            Cell checkCell = GetCell((xInput, yInput));
+            if(checkCell.HasShape() && checkCell.shape != currentShape)
+            {
+                return false;
+            }
+
+            return true;
+
+        } catch (Exception e)
+        {
+
+            return false;
+        }
+    }
+
 
     public bool CheckClearRow()
     {
 
-        foreach(Row row in rows)
+        foreach (Row row in rows)
         {
             int i = 0;
-            foreach(Cell cell in row.cells)
+            foreach (Cell cell in row.cells)
             {
                 bool check = cell.HasShape();
                 if (check)
                 {
                     i++;
-                    Renderer.RenderDebug($"i: {i}", 25);
+
                 }
             }
-            if(i == Config.gridWidth)
+            if (i == Config.gridWidth)
             {
                 rowsToClear.Add(row);
             }
         }
 
-        if(rowsToClear.Count > 0)
+        if (rowsToClear.Count > 0)
         {
             return true;
         }
@@ -911,15 +927,58 @@ public class GridManager
             }
         }
     }
-
-    
-
     public void EmptyRowsToClear()
         {
             rowsToClear.Clear();
         }
 
+    public int FindNextValidShapeRotation()
+    {
+        int rotationCheck = currentShape.rotation; 
+
+        for(int i = 0; i < currentShape.coordinateDictionary.Count; i++)
+        {
+            if(rotationCheck + 1 == currentShape.coordinateDictionary.Count)
+            {
+                rotationCheck = 0;
+            }
+            else
+            {
+                rotationCheck += 1;
+            }
+
+            if(currentShape.coordinateDictionary.TryGetValue(rotationCheck, out List<int[]> coordinates))
+            {
+                foreach (int[] coordinate in coordinates)
+                {
+                    int xResult = coordinate[0] + spawnCoordinate[0];
+                    int yResult = coordinate[1] + spawnCoordinate[1];
+                    bool validMoveCell = CheckCellMoveValidity(xResult, yResult);
+                    if (!validMoveCell)
+                    {
+                        return -1;
+                    }
+                }
+
+                return rotationCheck;
+            }
+            else
+            {
+                throw new Exception("Invalid rotation");
+            }
+
+            
+        }
+        
+        return -1;
     }
+
+    public void RotateShape(int rotation)
+    {
+        currentShape.SetRotation(rotation);
+    }
+
+}
 
 public class Cell
 {
@@ -1046,14 +1105,82 @@ public class Row
     }
 }
 
-public class Renderer
+public class GameData()
+{
+    public int score { get; private set; } = 0;
+    public int level { get; private set; } = 1;
+    public int IShapes { get; private set; } = 0;
+    public int OShapes { get; private set; } = 0;
+    public int TShapes { get; private set; } = 0;
+    public int SShapes { get; private set; } = 0;
+    public int ZShapes { get; private set; } = 0;
+    public int JShapes { get; private set; } = 0;
+    public int LShapes { get; private set; } = 0;
+
+    public void ScoreRows(int rows)
+    {
+        switch (rows)
+        {
+            case 0:
+                break;
+            case 1:
+                score += 40 * level;
+                break;
+            case 2:
+                score += 100 * level;
+                break;
+            case 3:
+                score += 300 * level;
+                break;
+            case 4:
+                score += 1200 * level;
+                break;
+            default:
+                break;
+        }
+    }
+
+    public void IncrementShapeCounts(ShapeType input)
+    {
+        switch (input)
+        {
+            case ShapeType.I:
+                IShapes++;
+                break;
+            case ShapeType.O:
+                OShapes++;
+                break;
+            case ShapeType.T:
+                TShapes++;
+                break;
+            case ShapeType.S:
+                SShapes++;
+                break;
+            case ShapeType.Z:
+                ZShapes++;
+                break;
+            case ShapeType.J:
+                JShapes++;
+                break;
+            case ShapeType.L:
+                LShapes++;
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(input), $"Unexpected ShapeType: {input}");
+        }
+    }
+
+}
+    public class Renderer
 {
    
     readonly GridManager _gridManager;
-    public Renderer(GridManager gridManager)
+
+    readonly GameData gameData;
+    public Renderer(GridManager gridManager, GameData gameData)
     {
         _gridManager = gridManager;
-     
+        this.gameData = gameData;
     }
     public void RenderGrid()
     {
@@ -1164,6 +1291,20 @@ public class Renderer
         Renderer.RenderDebug("Quit: Esc", 7);
 
     }
+
+    public void RenderGameData()
+    {
+        Renderer.RenderDebug($"Level: {gameData.level}", 0);
+        Renderer.RenderDebug($"Score: {gameData.score}", 1);
+        Renderer.RenderDebug($"I: {gameData.IShapes}", 2);
+        Renderer.RenderDebug($"O: {gameData.OShapes}", 3);
+        Renderer.RenderDebug($"T: {gameData.TShapes}", 4);
+        Renderer.RenderDebug($"S: {gameData.SShapes}", 5);
+        Renderer.RenderDebug($"Z: {gameData.ZShapes}", 6);
+        Renderer.RenderDebug($"J: {gameData.JShapes}", 7);
+        Renderer.RenderDebug($"L: {gameData.LShapes}", 8);
+
+    }
 }
 public class InputManager
 {
@@ -1177,7 +1318,7 @@ public class InputManager
     
     public async Task InputLoop()
     {
-        Renderer.RenderDebug("InputLoop started", 2);
+
         while (_gameManager.state != GameState.End)
         {
             Task handleInputTask = ProcessInput();
@@ -1195,18 +1336,13 @@ public class InputManager
 
     private async Task ProcessInput()
     {
-        Renderer.RenderDebug("Processinput started", 3);
+
         try
         {
             ConsoleKeyInfo key = await GetInput();
 
             KeyActionManager keyActionManager = new(_gameManager, _gridManager, key);
-            Renderer.RenderDebug("Past keyactionmanager", 5);
-          
-            // TEST CALLS
-        //    _gridManager.SetCurrentShapeCoordinates();
-          //  _gridManager.ActivateShapeCells();
-            //Renderer.RenderGrid();
+
         }
         catch (Exception ex)
         {
@@ -1218,7 +1354,7 @@ public class InputManager
 
     private async Task<ConsoleKeyInfo> GetInput()
     {
-        Renderer.RenderDebug("GetInput started", 4);
+
         try
         {
             return await Task.Run(() => Console.ReadKey(intercept: true));
@@ -1284,18 +1420,24 @@ public class InputManager
 
         public void WKey()
         {
-            _gridManager.currentShape.NextRotation();
+            int findRotation = _gridManager.FindNextValidShapeRotation();
+
+            if(findRotation != -1)
+            {
+                _gridManager.RotateShape(findRotation);
+            }
+            
         }
 
         public void DKey()
         {
-            Renderer.RenderDebug("D Key input", 17);
+
             _gridManager.Move(Direction.Right.ToArray());
         }
 
         public void AKey()
         {
-            Renderer.RenderDebug("A Key input", 17);
+
             _gridManager.Move(Direction.Left.ToArray());
         }
 
