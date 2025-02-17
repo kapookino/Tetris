@@ -25,25 +25,17 @@ using System.Security.Cryptography;
 using System.Threading.Tasks.Dataflow;
 using System.Transactions;
 
-// Initiatilize services and dependencies
-
-
-// The game itself runs via two Async Tasks, frameManagerTask which refreshes the game and renderer 
-// at a set rate and processes actions added to a ConcurrentQueue. inputTask which handles receiving input and translating 
-// that input into actions, which are added to the the ConcurrentQueue. The queue ensures all actions
-// are processed in the appropriate order with thread safety. 
-
 
 Config config = new();
 GameData gameData = new();
 GameManager gameManager = new(gameData);
-Renderer renderer = new(gameManager._gridManager, gameData);
-FrameManager frameManager = frameManager = new(gameManager, renderer);
-InputManager inputManager = new(gameManager, gameManager._gridManager);
+Renderer renderer = new(gameManager.gridManager, gameData);
+FrameManager frameManager = new(gameManager, renderer);
+InputManager inputManager = new(gameManager, gameManager.gridManager);
 
 Game game = new(frameManager, inputManager);
 await game.RunGame();
-// IMPLEMENT A STATE MACHINE AND INTERFACE
+
 
 public class Game
 {
@@ -74,13 +66,13 @@ public interface IGameState
 
 public class StateMachine
 {
-    private IGameState _currentState;
+    private IGameState currentState;
     private readonly Dictionary<GameState,IGameState> states;
-    private readonly GameManager _gameManager;
+    private readonly GameManager gameManager;
 
     public StateMachine(GameManager gameManager)
     {
-        _gameManager = gameManager;
+        this.gameManager = gameManager;
         states = new()
         {
             { GameState.Start, new StartState(gameManager) },
@@ -91,23 +83,25 @@ public class StateMachine
             { GameState.Pause, new PauseState(gameManager) },
             { GameState.End, new EndState(gameManager) }
         };
-        _currentState = states[GameState.Start];
-        _currentState.Enter();
+        currentState = states[GameState.Start];
+        currentState.Enter();
     }
 
     public void TransitionTo(GameState state)
     {
-        _currentState?.Exit();
-        _currentState = states[state];
-        Renderer.RenderDebug($"Transitioning to {_currentState}", 25);
-        _currentState.Enter();
-        _gameManager.SetGameState(state);  
+        currentState?.Exit();
+        currentState = states[state];
+        Renderer.RenderDebug($"Transitioning to {currentState}", 25);
+        currentState.Enter();
+
+        // Possibly remove
+        gameManager.SetGameState(state);  
 
     }
 
     public void Update(int currentFrame)
     {
-        _currentState.Update(currentFrame);
+        currentState.Update(currentFrame);
     }
 }
 
@@ -120,9 +114,11 @@ public class StartState : IGameState
     }
     public void Enter()
     {
-       // _gameManager._gridManager.SetSpawnCoordinate(Config.startingCellCoordinate);
+       // gameManager.gridManager.SetSpawnCoordinate(Config.startingCellCoordinate);
     }
     public void Update(int currentFrame)
+
+    // Possibly remove and replace with triggering event
     {
         _gameManager.stateMachine.TransitionTo(GameState.Spawn);
     }
@@ -140,23 +136,25 @@ public class StartState : IGameState
 
 public class SpawnState : IGameState
 {
-    private readonly GameManager _gameManager;
+    private readonly GameManager gameManager;
     public SpawnState(GameManager gameManager)
     {
-        _gameManager = gameManager;
+        this.gameManager = gameManager;
     }
     public void Enter()
     {
-            _gameManager._gridManager.SetSpawnCoordinate(Config.startingCellCoordinate);
-            Shape shape = _gameManager.NewShape();
-            _gameManager._gridManager.SetCurrentShape(shape);
+            // remove, exists to get gridmanager and the shape methods already have been targeted for movement
+            gameManager.gridManager.SetSpawnCoordinate(Config.startingCellCoordinate);
+            Shape shape = gameManager.NewShape();
+            gameManager.gridManager.SetCurrentShape(shape);
        
 
 
     }
     public void Update(int currentFrame)
     {
-        _gameManager.stateMachine.TransitionTo(GameState.Movement);
+        // remove and replace with event
+        gameManager.stateMachine.TransitionTo(GameState.Movement);
 
     }
 
@@ -186,11 +184,11 @@ public class MovementState : IGameState
     {
         try
         {
+            // remove - just accesses grid manager
+        _gameManager.gridManager.DeactivateShapeCells();
+        _gameManager.gridManager.SetCurrentShapeCoordinates();
 
-        _gameManager._gridManager.DeactivateShapeCells();
-        _gameManager._gridManager.SetCurrentShapeCoordinates();
-
-        _gameManager._gridManager.ActivateShapeCells();
+        _gameManager.gridManager.ActivateShapeCells();
             
             
         } catch (Exception ex)
@@ -200,7 +198,8 @@ public class MovementState : IGameState
 
         if (currentFrame % 3 == 0)
         {
-            _gameManager._gridManager.Move(Direction.Down.ToArray());
+            // remove - just accesses grid manager
+            _gameManager.gridManager.Move(Direction.Down.ToArray());
         }
     }
 
@@ -225,20 +224,23 @@ public class FreezeState : IGameState
     {
         try
         {
-        _gameManager.gameData.IncrementShapeCounts(_gameManager._gridManager.currentShape.shapeType);
+            // remove - pass score updates as events?
+            _gameManager.gameData.IncrementShapeCounts(_gameManager.gridManager.currentShape.shapeType);
 
         } catch (Exception ex)
         {
             Renderer.RenderDebug( $"Increment Shape count failed: {ex}", 15);
         }
 
-        _gameManager._gridManager.ClearCurrentShape();
+        _gameManager.gridManager.ClearCurrentShape();
 
         // check row
     }
     public void Update(int currentFrame)
     {
-        if (_gameManager._gridManager.CheckClearRow())
+
+        // remove - statemachine updates to be handled via event and will pass in gridmanager
+        if (_gameManager.gridManager.CheckClearRow())
         {
             _gameManager.stateMachine.TransitionTo(GameState.ClearRow);
         }
@@ -271,20 +273,23 @@ public class ClearRowState : IGameState
     }
     public void Enter()
     {
-        _gameManager.gameData.ScoreRows(_gameManager._gridManager.rowsToClear.Count);
-        _gameManager._gridManager.ClearRows();
-        _gameManager._gridManager.ShiftDown();
+        // remove rw event
+        _gameManager.gameData.ScoreRows(_gameManager.gridManager.rowsToClear.Count);
+
+        // remove - just accesses grid manager
+        _gameManager.gridManager.ShiftDown();
     }
     public void Update(int currentFrame)
     {
                                                                                                                                                                                                                        
-
+        // remove rw event
         _gameManager.stateMachine.TransitionTo(GameState.Spawn);
     }
 
     public void Exit()
     {
-        _gameManager._gridManager.EmptyRowsToClear();
+        // remove - just accesses grid manager
+        _gameManager.gridManager.EmptyRowsToClear();
     }
 
     public void HandleInput()
@@ -352,17 +357,16 @@ public class GameManager
 {
     public GameState state {  get; private set; }
 
-    public GridManager _gridManager {  get; private set; }
+    public GridManager gridManager {  get; private set; }
     public StateMachine stateMachine { get; private set; }
     
     public GameData gameData { get; private set; }
 
-    private int currentFrame;
 
     public GameManager(GameData input)
     {
         gameData = input;
-        _gridManager = new GridManager(this);
+        gridManager = new GridManager(this);
         stateMachine = new(this);
 
     }
@@ -371,16 +375,17 @@ public class GameManager
     {
         state = stateInput;
     }
-
+    // move to gridmanager
     public Shape NewShape()
     {
         return new Shape((ShapeType)GetRandomShapeType());
-        return new Shape(ShapeType.S);
+   //     return new Shape(ShapeType.S);
     }
 
-    private int GetRandomShapeType()
+    // move to grid manager
+    private static int GetRandomShapeType()
     {
-        Random rand = new Random();
+        Random rand = new();
         int randomShape = rand.Next(0, Enum.GetValues(typeof(ShapeType)).Length);
         return randomShape;
     }
@@ -412,7 +417,7 @@ public class FrameManager
         {
             _renderer.RenderGameData();
             _renderer.RenderGrid();
-            //_gameManager.StateDecisions(currentFrame);
+            //gameManager.StateDecisions(currentFrame);
             _gameManager.stateMachine.Update(currentFrame);
             await Task.Delay(frameRate);
             IncrementFrame();
@@ -472,7 +477,7 @@ public class Config
         SetConsoleConfig();
     }
 
-    void SetConsoleConfig()
+    static void SetConsoleConfig()
     {
 
         CursorVisible = false;
@@ -582,7 +587,7 @@ public class Shape
         };
     }
 
-     private void CreateOShape()
+    private void CreateOShape()
     {
         shapeColor = ConsoleColor.Yellow;
         coordinateDictionary = new()
@@ -845,7 +850,7 @@ public class GridManager
 
             return true;
 
-        } catch (Exception e)
+        } catch (Exception ex)
         {
 
             return false;
@@ -882,12 +887,7 @@ public class GridManager
         return false;
     }
 
-    public void ClearRows() { 
-        foreach(Row row in rowsToClear)
-        {
-//            row.ClearRow();
-        }
-    }
+
 
     public void ShiftDown()
     {
@@ -1096,13 +1096,6 @@ public class Row
         cells.Add(cell);
     }
 
-    public void ClearRow()
-    {
-        foreach (Cell cell in cells)
-        {
-            cell.Deactivate();
-        }
-    }
 }
 
 public class GameData()
