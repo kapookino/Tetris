@@ -19,39 +19,108 @@
 // Shape represents the overarching "tetronomino"
 
 using System;
+using System.Collections.Concurrent;
 using System.Data;
 using System.Linq.Expressions;
 using System.Security.Cryptography;
 using System.Threading.Tasks.Dataflow;
 using System.Transactions;
+using static Game;
 
 
 Config config = new();
 GameData gameData = new();
-GameManager gameManager = new(gameData);
-Renderer renderer = new(gameManager.gridManager, gameData);
-FrameManager frameManager = new(gameManager, renderer);
-InputManager inputManager = new(gameManager, gameManager.gridManager);
-
-Game game = new(frameManager, inputManager);
+GridManager gridManager = new();
+StateMachine stateMachine = new(gridManager);
+Renderer renderer = new(gridManager, gameData);
+InputManager inputManager = new(gridManager);
+Game game = new(stateMachine, inputManager, renderer);
 await game.RunGame();
 
 
 public class Game
 {
-    FrameManager frameManager {  get; set; }
+
     InputManager inputManager { get; set; }
-    public Game(FrameManager inputFrameManager, InputManager inputInputManager)
+    StateMachine stateMachine { get; set; }
+        private Renderer renderer {  get; set; }
+        const int frameRate = 50;
+        public int currentFrame { get; private set; } = 1;
+    public Game(StateMachine stateMachine, InputManager inputManager, Renderer renderer)
     {
-        frameManager = inputFrameManager;
-        inputManager = inputInputManager;
+        this.renderer = renderer;
+        this.stateMachine = stateMachine;
+        this.inputManager = inputManager;
     }
 
     public async Task RunGame()
     {
-        Task frameManagerTask = Task.Run(() => frameManager.RunGame());
+        Task gameTask = Task.Run(() => GameLoop());
         Task inputTask = Task.Run(() => inputManager.InputLoop());
-        await Task.WhenAll(inputTask, frameManagerTask);
+        await Task.WhenAll(inputTask, gameTask);
+    }
+
+        private void IncrementFrame()
+        {
+            currentFrame++;
+        }
+
+        public async Task GameLoop()
+        {
+        while (true)
+            {
+                ActionQueue.ProcessAction();
+                renderer.RenderGameData();
+                renderer.RenderGrid();
+                //gameManager.StateDecisions(currentFrame);
+                stateMachine.Update(currentFrame);
+                await Task.Delay(frameRate);
+                IncrementFrame();
+
+            }
+
+           
+        }
+
+    }
+public static class GameEvents
+{
+ 
+    // Game state change event
+    public static event Action<GameState> OnStateChange;
+    public static event Action<int> OnScoreClearRows;
+    public static event Action OnShiftDown;
+    public static event Action OnClearShape;
+    public static event Action<ShapeType> OnCountShape;
+    public static event Action<int[]> OnRequestMove;
+    public static event Action OnRequestRotate;
+
+    // Methods to raise events
+    public static void ChangeState(GameState newState) => OnStateChange?.Invoke(newState);
+    public static void ScoreClearRows(int rowsCleared) => OnScoreClearRows?.Invoke(rowsCleared);
+    public static void ShiftDown() => OnShiftDown?.Invoke();
+    public static void CountShape(ShapeType shapeType) => OnCountShape?.Invoke(shapeType);
+    public static void RequestMove(int[] direction) => OnRequestMove?.Invoke(direction);
+    public static void RequestRotate() => OnRequestRotate?.Invoke();
+    public static void ClearShape() => OnClearShape?.Invoke();
+}
+
+public static class ActionQueue
+{
+    private static ConcurrentQueue<Action> _actions = new ConcurrentQueue<Action>();
+
+    public static void Enqueue(Action action)
+    {
+        _actions.Enqueue(action);
+
+    }
+
+    public static void ProcessAction()
+    {
+        while(_actions.TryDequeue(out var action))
+        {
+            action?.Invoke();
+        }
     }
 }
 
@@ -64,24 +133,26 @@ public interface IGameState
     void HandleInput();
 }
 
+
 public class StateMachine
 {
-    private IGameState currentState;
+    public IGameState currentState { get; private set; }
     private readonly Dictionary<GameState,IGameState> states;
-    private readonly GameManager gameManager;
+    private readonly GridManager gridManager;
 
-    public StateMachine(GameManager gameManager)
+    public StateMachine(GridManager gridManager)
     {
-        this.gameManager = gameManager;
+        this.gridManager = gridManager;
+        GameEvents.OnStateChange += TransitionTo;
         states = new()
         {
-            { GameState.Start, new StartState(gameManager) },
-            { GameState.Spawn, new SpawnState(gameManager) },
-            { GameState.Movement, new MovementState(gameManager) },
-            { GameState.Freeze, new FreezeState(gameManager) },
-            { GameState.ClearRow, new ClearRowState(gameManager) },
-            { GameState.Pause, new PauseState(gameManager) },
-            { GameState.End, new EndState(gameManager) }
+            { GameState.Start, new StartState(gridManager) },
+            { GameState.Spawn, new SpawnState(gridManager) },
+            { GameState.Movement, new MovementState(gridManager) },
+            { GameState.Freeze, new FreezeState(gridManager) },
+            { GameState.ClearRow, new ClearRowState(gridManager) },
+            { GameState.Pause, new PauseState(gridManager) },
+            { GameState.End, new EndState(gridManager) }
         };
         currentState = states[GameState.Start];
         currentState.Enter();
@@ -94,8 +165,6 @@ public class StateMachine
         Renderer.RenderDebug($"Transitioning to {currentState}", 25);
         currentState.Enter();
 
-        // Possibly remove
-        gameManager.SetGameState(state);  
 
     }
 
@@ -107,20 +176,20 @@ public class StateMachine
 
 public class StartState : IGameState
 {
-    private readonly GameManager _gameManager;
-    public StartState(GameManager gameManager)
+    private readonly GridManager gridManager;
+    public StartState(GridManager gridManager)
     {
-        _gameManager = gameManager;
+        this.gridManager = gridManager;
     }
     public void Enter()
     {
-       // gameManager.gridManager.SetSpawnCoordinate(Config.startingCellCoordinate);
+ 
     }
     public void Update(int currentFrame)
 
-    // Possibly remove and replace with triggering event
+
     {
-        _gameManager.stateMachine.TransitionTo(GameState.Spawn);
+        GameEvents.ChangeState(GameState.Spawn); 
     }
 
     public void Exit()
@@ -136,25 +205,28 @@ public class StartState : IGameState
 
 public class SpawnState : IGameState
 {
-    private readonly GameManager gameManager;
-    public SpawnState(GameManager gameManager)
+
+
+    private readonly GridManager gridManager;
+    public SpawnState(GridManager gridManager)
     {
-        this.gameManager = gameManager;
+        this.gridManager = gridManager;
+
     }
     public void Enter()
     {
-            // remove, exists to get gridmanager and the shape methods already have been targeted for movement
-            gameManager.gridManager.SetSpawnCoordinate(Config.startingCellCoordinate);
-            Shape shape = gameManager.NewShape();
-            gameManager.gridManager.SetCurrentShape(shape);
+            // refactor
+            gridManager.SetSpawnCoordinate(Config.startingCellCoordinate);
+            Shape shape = gridManager.NewShape();
+            gridManager.SetCurrentShape(shape);
        
 
 
     }
     public void Update(int currentFrame)
     {
-        // remove and replace with event
-        gameManager.stateMachine.TransitionTo(GameState.Movement);
+    
+        GameEvents.ChangeState(GameState.Movement);
 
     }
 
@@ -171,10 +243,10 @@ public class SpawnState : IGameState
 
 public class MovementState : IGameState
 {
-    private readonly GameManager _gameManager;
-    public MovementState(GameManager gameManager)
+    private readonly GridManager gridManager;
+    public MovementState(GridManager gridManager)
     {
-        _gameManager = gameManager;
+        this.gridManager = gridManager;
     }
     public void Enter()
     {
@@ -182,13 +254,15 @@ public class MovementState : IGameState
     }
     public void Update(int currentFrame)
     {
+
+        // refactor
         try
         {
             // remove - just accesses grid manager
-        _gameManager.gridManager.DeactivateShapeCells();
-        _gameManager.gridManager.SetCurrentShapeCoordinates();
+        gridManager.DeactivateShapeCells();
+        gridManager.SetCurrentShapeCoordinates();
 
-        _gameManager.gridManager.ActivateShapeCells();
+        gridManager.ActivateShapeCells();
             
             
         } catch (Exception ex)
@@ -199,7 +273,7 @@ public class MovementState : IGameState
         if (currentFrame % 3 == 0)
         {
             // remove - just accesses grid manager
-            _gameManager.gridManager.Move(Direction.Down.ToArray());
+            ActionQueue.Enqueue(() => GameEvents.RequestMove(Direction.Down.ToArray()));
         }
     }
 
@@ -215,39 +289,39 @@ public class MovementState : IGameState
 }
 public class FreezeState : IGameState
 {
-    private readonly GameManager _gameManager;
-    public FreezeState(GameManager gameManager)
+    private readonly GridManager gridManager;
+    public FreezeState(GridManager gridManager)
     {
-        _gameManager = gameManager;
+        this.gridManager = gridManager;
     }
     public void Enter()
     {
         try
         {
             // remove - pass score updates as events?
-            _gameManager.gameData.IncrementShapeCounts(_gameManager.gridManager.currentShape.shapeType);
+            GameEvents.CountShape(gridManager.currentShape.shapeType);
+           
 
         } catch (Exception ex)
         {
             Renderer.RenderDebug( $"Increment Shape count failed: {ex}", 15);
         }
+        // refactor
 
-        _gameManager.gridManager.ClearCurrentShape();
-
-        // check row
+        GameEvents.ClearShape();
     }
     public void Update(int currentFrame)
     {
-
+        // refactor
         // remove - statemachine updates to be handled via event and will pass in gridmanager
-        if (_gameManager.gridManager.CheckClearRow())
+        if (gridManager.CheckClearRow())
         {
-            _gameManager.stateMachine.TransitionTo(GameState.ClearRow);
+            GameEvents.ChangeState(GameState.ClearRow);
+           
         }
         else
         {
-            _gameManager.stateMachine.TransitionTo(GameState.Spawn);
-
+            GameEvents.ChangeState(GameState.Spawn);
         }
         
 
@@ -266,30 +340,29 @@ public class FreezeState : IGameState
 
 public class ClearRowState : IGameState
 {
-    private readonly GameManager _gameManager;
-    public ClearRowState(GameManager gameManager)
+    private readonly GridManager gridManager;
+    public ClearRowState(GridManager gridManager)
     {
-        _gameManager = gameManager;
+        this.gridManager = gridManager;
     }
     public void Enter()
     {
         // remove rw event
-        _gameManager.gameData.ScoreRows(_gameManager.gridManager.rowsToClear.Count);
+        GameEvents.ScoreClearRows(gridManager.rowsToClear.Count);
 
-        // remove - just accesses grid manager
-        _gameManager.gridManager.ShiftDown();
+        GameEvents.ShiftDown();
     }
     public void Update(int currentFrame)
     {
                                                                                                                                                                                                                        
         // remove rw event
-        _gameManager.stateMachine.TransitionTo(GameState.Spawn);
+        GameEvents.ChangeState(GameState.Spawn);
     }
 
     public void Exit()
     {
         // remove - just accesses grid manager
-        _gameManager.gridManager.EmptyRowsToClear();
+        gridManager.EmptyRowsToClear();
     }
 
     public void HandleInput()
@@ -300,10 +373,10 @@ public class ClearRowState : IGameState
 
 public class PauseState : IGameState
 {
-    private readonly GameManager _gameManager;
-    public PauseState(GameManager gameManager)
+    private readonly GridManager gridManager;
+    public PauseState(GridManager gridManager)
     {
-        _gameManager = gameManager;
+        this.gridManager = gridManager;
     }
     public void Enter()
     {
@@ -326,10 +399,10 @@ public class PauseState : IGameState
 }
 public class EndState : IGameState
 {
-    private readonly GameManager _gameManager;
-    public EndState(GameManager gameManager)
+    private readonly GridManager gridManager;
+    public EndState(GridManager gridManager)
     {
-        _gameManager = gameManager;
+        this.gridManager = gridManager;
     }
     public void Enter()
     {
@@ -352,84 +425,6 @@ public class EndState : IGameState
 }
 
 #endregion
-
-public class GameManager
-{
-    public GameState state {  get; private set; }
-
-    public GridManager gridManager {  get; private set; }
-    public StateMachine stateMachine { get; private set; }
-    
-    public GameData gameData { get; private set; }
-
-
-    public GameManager(GameData input)
-    {
-        gameData = input;
-        gridManager = new GridManager(this);
-        stateMachine = new(this);
-
-    }
-
-    public void SetGameState(GameState stateInput)
-    {
-        state = stateInput;
-    }
-    // move to gridmanager
-    public Shape NewShape()
-    {
-        return new Shape((ShapeType)GetRandomShapeType());
-   //     return new Shape(ShapeType.S);
-    }
-
-    // move to grid manager
-    private static int GetRandomShapeType()
-    {
-        Random rand = new();
-        int randomShape = rand.Next(0, Enum.GetValues(typeof(ShapeType)).Length);
-        return randomShape;
-    }
-}
-
-// This class 
-public class FrameManager
-{
-    const int frameRate = 50;
-    public int currentFrame {  get; private set; } = 1;
-
-    private GameManager _gameManager;
-
-    private Renderer _renderer;
-    public FrameManager(GameManager gameManager, Renderer renderer)
-    {
-        _gameManager = gameManager;
-        _renderer = renderer;
-    }
-
-    private void IncrementFrame()
-    {
-        currentFrame++;
-    }
-
-    public async Task RunGame()
-    {
-        while (_gameManager.state != GameState.End)
-        {
-            _renderer.RenderGameData();
-            _renderer.RenderGrid();
-            //gameManager.StateDecisions(currentFrame);
-            _gameManager.stateMachine.Update(currentFrame);
-            await Task.Delay(frameRate);
-            IncrementFrame();
-
-            
-        }
-
-        Renderer.RenderDebug($"You lose!", 20);
-    }
-
-}
-
 
 
 public enum GameState
@@ -679,14 +674,15 @@ public class GridManager
 
     private Dictionary<(int, int), Cell> _cells = new(); // for cell lookup
 
-    readonly GameManager _gameManager;
 
-    public GridManager(GameManager gameManager)
+
+    public GridManager()
     {
-        _gameManager = gameManager;
+        GameEvents.OnRequestMove += Move;
+        GameEvents.OnRequestRotate += TryRotateShape;
+        GameEvents.OnShiftDown += ShiftDown;
+        GameEvents.OnClearShape += ClearCurrentShape;
         CreateCells();
-
-
     }
 
     public void SetSpawnCoordinate(int[] input)
@@ -786,7 +782,7 @@ public class GridManager
 
                 break;
             case MoveOption.Freeze:
-                _gameManager.stateMachine.TransitionTo(GameState.Freeze);
+                GameEvents.ChangeState (GameState.Freeze);
 
                 break;
         }
@@ -886,9 +882,6 @@ public class GridManager
 
         return false;
     }
-
-
-
     public void ShiftDown()
     {
       //  for(int i = rowsToClear.Count - 1; i >= 0; i--)
@@ -931,7 +924,16 @@ public class GridManager
         {
             rowsToClear.Clear();
         }
+    
+    public void TryRotateShape()
+    {
+        int findRotation = FindNextValidShapeRotation();
 
+        if (findRotation != -1)
+        {
+            RotateShape(findRotation);
+        }
+    }
     public int FindNextValidShapeRotation()
     {
         int rotationCheck = currentShape.rotation; 
@@ -976,6 +978,21 @@ public class GridManager
     public void RotateShape(int rotation)
     {
         currentShape.SetRotation(rotation);
+    }
+
+ 
+    public Shape NewShape()
+    {
+        return new Shape((ShapeType)GetRandomShapeType());
+        //     return new Shape(ShapeType.S);
+    }
+
+
+    private static int GetRandomShapeType()
+    {
+        Random rand = new();
+        int randomShape = rand.Next(0, Enum.GetValues(typeof(ShapeType)).Length);
+        return randomShape;
     }
 
 }
@@ -1098,7 +1115,7 @@ public class Row
 
 }
 
-public class GameData()
+public class GameData
 {
     public int score { get; private set; } = 0;
     public int level { get; private set; } = 1;
@@ -1109,6 +1126,12 @@ public class GameData()
     public int ZShapes { get; private set; } = 0;
     public int JShapes { get; private set; } = 0;
     public int LShapes { get; private set; } = 0;
+
+    public GameData()
+    {
+        GameEvents.OnScoreClearRows += ScoreRows;
+        GameEvents.OnCountShape += IncrementShapeCounts;
+    }
 
     public void ScoreRows(int rows)
     {
@@ -1301,146 +1324,62 @@ public class GameData()
 }
 public class InputManager
 {
-    private GameManager _gameManager { get; set; }
-    private GridManager _gridManager { get; set; }  
-    public InputManager(GameManager gameManager, GridManager gridManager)
+    private GridManager _gridManager { get; set; }
+    private DateTime lastMoveTime = DateTime.MinValue;
+    private TimeSpan moveCooldown = TimeSpan.FromMilliseconds(75);
+    public InputManager(GridManager gridManager)
     {
-        _gameManager = gameManager;
         _gridManager = gridManager;
     }
     
     public async Task InputLoop()
     {
 
-        while (_gameManager.state != GameState.End)
+        while (true)
         {
-            Task handleInputTask = ProcessInput();
+            if (Console.KeyAvailable)
+            {
+                ConsoleKeyInfo key = Console.ReadKey(intercept: true);
+                ProcessKeyInput(key);
+                
+            }
+                await Task.Delay(15);
 
-            try
-            {
-                await handleInputTask;
-            }
-            catch (Exception ex)
-            {
-                Renderer.RenderDebug($"Exception caught: {ex.Message}", 15);
-            }
         }
     }
 
-    private async Task ProcessInput()
+    private void ProcessKeyInput(ConsoleKeyInfo key)
     {
+        if (DateTime.Now - lastMoveTime < moveCooldown)
+            return; // Prevents spamming moves before previous moves finish processing
 
-        try
+        lastMoveTime = DateTime.Now; // Reset cooldown timer
+
+        switch (key.Key)
         {
-            ConsoleKeyInfo key = await GetInput();
-
-            KeyActionManager keyActionManager = new(_gameManager, _gridManager, key);
-
-        }
-        catch (Exception ex)
-        {
-            Renderer.RenderDebug($"Exception caught: {ex.Message}", 15);
-        }
-
-
-    }
-
-    private async Task<ConsoleKeyInfo> GetInput()
-    {
-
-        try
-        {
-            return await Task.Run(() => Console.ReadKey(intercept: true));
-
-        }
-        catch (Exception ex)
-        {
-            Renderer.RenderDebug($"Exception caught: {ex.Message}", 15);
-            throw;
-        }
-
-    }
-
-    public class KeyActionManager
-    {
-        private GameManager _gameManager { get; set; }
-        private GridManager _gridManager { get; set; }
-        public KeyActionManager(GameManager gameManager, GridManager gridManager, ConsoleKeyInfo key)
-        {
-            _gameManager = gameManager;
-            _gridManager = gridManager;
-            ProcessKeyInput(key);
-        }
-
-
-        public void ProcessKeyInput(ConsoleKeyInfo key)
-        {
-            switch(key.Key)
-            {
-                case ConsoleKey.Enter:
-                    EnterKey();
-                    break;
-                    case ConsoleKey.D:
-                    DKey();
-                    break;
-                    case ConsoleKey.A:
-                        AKey(); 
-                    break;
-                case ConsoleKey.W:
-                    WKey();
-                    break;
-                default:
-                    break;
-            }
-
-        }
-        public void EnterKey()
-        {
-            switch (_gameManager.state)
-            {
-                case GameState.Spawn:
-                    //Renderer.SetStartingOffset();
-                    _gameManager.SetGameState(GameState.Movement);
-                    break;
-                case GameState.Movement:
-                    _gameManager.SetGameState(GameState.Pause);
-                    break;
-                case GameState.Pause:
-                    _gameManager.SetGameState(GameState.Movement);
-                    break;
-            }
-        }
-
-        public void WKey()
-        {
-            int findRotation = _gridManager.FindNextValidShapeRotation();
-
-            if(findRotation != -1)
-            {
-                _gridManager.RotateShape(findRotation);
-            }
-            
-        }
-
-        public void DKey()
-        {
-
-            _gridManager.Move(Direction.Right.ToArray());
-        }
-
-        public void AKey()
-        {
-
-            _gridManager.Move(Direction.Left.ToArray());
-        }
-
-        public void SKey()
-        {
-            _gridManager.Move(Direction.Down.ToArray());
+            case ConsoleKey.A:
+                ActionQueue.Enqueue(() => GameEvents.RequestMove(Direction.Left.ToArray()));
+                break;
+            case ConsoleKey.D:
+                ActionQueue.Enqueue(() => GameEvents.RequestMove(Direction.Right.ToArray()));
+                break;
+            case ConsoleKey.S:
+                ActionQueue.Enqueue(() => GameEvents.RequestMove(Direction.Down.ToArray()));
+                break;
+            case ConsoleKey.W:
+                ActionQueue.Enqueue(() => GameEvents.RequestRotate());
+                break;
+            default:
+                break;
         }
     }
-
 }
+
+
+
+   
+
+
 public readonly struct Direction
 {
     public int X { get; }
