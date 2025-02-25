@@ -21,6 +21,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Data;
+using System.Diagnostics.Contracts;
 using System.Linq.Expressions;
 using System.Security.Cryptography;
 using System.Threading.Tasks.Dataflow;
@@ -30,10 +31,12 @@ using static Game;
 
 Config config = new();
 GameData gameData = new();
-GridManager gridManager = new();
-StateMachine stateMachine = new(gridManager);
-Renderer renderer = new(gridManager, gameData);
-InputManager inputManager = new(gridManager);
+Grid grid = new();
+RowManager rowManager = new(grid);
+ShapeController shapeController = new(grid);
+StateMachine stateMachine = new(grid);
+Renderer renderer = new(gameData);
+InputManager inputManager = new(grid);
 Game game = new(stateMachine, inputManager, renderer);
 await game.RunGame();
 
@@ -44,7 +47,7 @@ public class Game
     InputManager inputManager { get; set; }
     StateMachine stateMachine { get; set; }
         private Renderer renderer {  get; set; }
-        const int frameRate = 50;
+        const int frameRate = 100;
         public int currentFrame { get; private set; } = 1;
     public Game(StateMachine stateMachine, InputManager inputManager, Renderer renderer)
     {
@@ -67,21 +70,17 @@ public class Game
 
         public async Task GameLoop()
         {
+                renderer.RenderGrid();
         while (true)
             {
                 ActionQueue.ProcessAction();
                 renderer.RenderGameData();
-                renderer.RenderGrid();
-                //gameManager.StateDecisions(currentFrame);
+                renderer.RenderCells();
                 stateMachine.Update(currentFrame);
                 await Task.Delay(frameRate);
                 IncrementFrame();
-
             }
-
-           
         }
-
     }
 public static class GameEvents
 {
@@ -94,33 +93,68 @@ public static class GameEvents
     public static event Action<ShapeType> OnCountShape;
     public static event Action<int[]> OnRequestMove;
     public static event Action OnRequestRotate;
+    public static event Action OnRequestSpawnShape;
+    public static event Action<Cell> OnRequestCellRender;
+    public static event Action OnRequestCheckAndClearRows;
 
     // Methods to raise events
-    public static void ChangeState(GameState newState) => OnStateChange?.Invoke(newState);
+    public static void RequestChangeState(GameState newState) => OnStateChange?.Invoke(newState);
     public static void ScoreClearRows(int rowsCleared) => OnScoreClearRows?.Invoke(rowsCleared);
     public static void ShiftDown() => OnShiftDown?.Invoke();
     public static void CountShape(ShapeType shapeType) => OnCountShape?.Invoke(shapeType);
     public static void RequestMove(int[] direction) => OnRequestMove?.Invoke(direction);
     public static void RequestRotate() => OnRequestRotate?.Invoke();
     public static void ClearShape() => OnClearShape?.Invoke();
+    public static void SpawnShape() => OnRequestSpawnShape?.Invoke();
+    public static void RequestCellRender(Cell cell) => OnRequestCellRender?.Invoke(cell);
+    public static void RequestCheckAndClearRows() => OnRequestCheckAndClearRows?.Invoke();
 }
 
+// The ActionQueue implements a ConcurrentQueue to ensure inputs from the InputManager are processed in a threadsafe manner
 public static class ActionQueue
 {
-    private static ConcurrentQueue<Action> _actions = new ConcurrentQueue<Action>();
+    private static ConcurrentQueue<(ActionKey actionKey,Action action)> _actions = new();
+    private static ConcurrentDictionary<ActionKey, bool> _uniqueActions = new();
 
-    public static void Enqueue(Action action)
+    public static void TryEnqueue(ActionKey actionKey, Action action)
     {
-        _actions.Enqueue(action);
+        if(_uniqueActions.TryAdd(actionKey, true))
+        {
+            Enqueue(actionKey,action);
+        }
+    }
+
+    public static void Enqueue(ActionKey actionKey, Action action)
+    {
+        _actions.Enqueue((actionKey, action));
 
     }
 
     public static void ProcessAction()
     {
+        bool moveDownOccurred = false;
         while(_actions.TryDequeue(out var action))
         {
-            action?.Invoke();
+            if(moveDownOccurred && (action.Item1 is ActionKey.Down or ActionKey.Right or ActionKey.Left))
+            {
+                continue;
+            } 
+
+            action.Item2.Invoke();
+            
+            if(action.Item1 == ActionKey.Down)
+            {
+                moveDownOccurred = true;    
+            }
+
         }
+
+        ClearDictionary();
+    }
+
+    private static void ClearDictionary()
+    {
+        _uniqueActions.Clear();
     }
 }
 
@@ -130,7 +164,7 @@ public interface IGameState
     void Enter();
     void Update(int currentFrame);
     void Exit();
-    void HandleInput();
+
 }
 
 
@@ -138,21 +172,19 @@ public class StateMachine
 {
     public IGameState currentState { get; private set; }
     private readonly Dictionary<GameState,IGameState> states;
-    private readonly GridManager gridManager;
 
-    public StateMachine(GridManager gridManager)
+    public StateMachine(Grid gridManager)
     {
-        this.gridManager = gridManager;
+        
         GameEvents.OnStateChange += TransitionTo;
         states = new()
         {
-            { GameState.Start, new StartState(gridManager) },
-            { GameState.Spawn, new SpawnState(gridManager) },
-            { GameState.Movement, new MovementState(gridManager) },
-            { GameState.Freeze, new FreezeState(gridManager) },
-            { GameState.ClearRow, new ClearRowState(gridManager) },
-            { GameState.Pause, new PauseState(gridManager) },
-            { GameState.End, new EndState(gridManager) }
+            { GameState.Start, new StartState() },
+            { GameState.Spawn, new SpawnState() },
+            { GameState.Movement, new MovementState() },
+            { GameState.Freeze, new FreezeState() },
+            { GameState.Pause, new PauseState() },
+            { GameState.End, new EndState() },
         };
         currentState = states[GameState.Start];
         currentState.Enter();
@@ -162,7 +194,7 @@ public class StateMachine
     {
         currentState?.Exit();
         currentState = states[state];
-        Renderer.RenderDebug($"Transitioning to {currentState}", 25);
+        Renderer.RenderDebug($"Transitioning to {currentState}", 19);
         currentState.Enter();
 
 
@@ -176,10 +208,10 @@ public class StateMachine
 
 public class StartState : IGameState
 {
-    private readonly GridManager gridManager;
-    public StartState(GridManager gridManager)
+
+    public StartState()
     {
-        this.gridManager = gridManager;
+
     }
     public void Enter()
     {
@@ -189,7 +221,7 @@ public class StartState : IGameState
 
 
     {
-        GameEvents.ChangeState(GameState.Spawn); 
+        GameEvents.RequestChangeState(GameState.Spawn); 
     }
 
     public void Exit()
@@ -197,36 +229,25 @@ public class StartState : IGameState
 
     }
 
-    public void HandleInput()
-    {
-
-    }
 }
 
 public class SpawnState : IGameState
 {
 
-
-    private readonly GridManager gridManager;
-    public SpawnState(GridManager gridManager)
+    public SpawnState()
     {
-        this.gridManager = gridManager;
 
     }
     public void Enter()
     {
-            // refactor
-            gridManager.SetSpawnCoordinate(Config.startingCellCoordinate);
-            Shape shape = gridManager.NewShape();
-            gridManager.SetCurrentShape(shape);
-       
-
+        
 
     }
     public void Update(int currentFrame)
     {
     
-        GameEvents.ChangeState(GameState.Movement);
+        GameEvents.SpawnShape();
+        GameEvents.RequestChangeState(GameState.Movement);
 
     }
 
@@ -235,18 +256,15 @@ public class SpawnState : IGameState
         
     }
 
-    public void HandleInput()
-    {
 
-    }
 }
 
 public class MovementState : IGameState
 {
-    private readonly GridManager gridManager;
-    public MovementState(GridManager gridManager)
+
+    public MovementState()
     {
-        this.gridManager = gridManager;
+   
     }
     public void Enter()
     {
@@ -255,25 +273,10 @@ public class MovementState : IGameState
     public void Update(int currentFrame)
     {
 
-        // refactor
-        try
+        if (currentFrame % 4 == 0)
         {
-            // remove - just accesses grid manager
-        gridManager.DeactivateShapeCells();
-        gridManager.SetCurrentShapeCoordinates();
-
-        gridManager.ActivateShapeCells();
-            
-            
-        } catch (Exception ex)
-        {
-            Renderer.RenderDebug($"movement update: {ex}", 21);
-        }
-
-        if (currentFrame % 3 == 0)
-        {
-            // remove - just accesses grid manager
-            ActionQueue.Enqueue(() => GameEvents.RequestMove(Direction.Down.ToArray()));
+           
+            ActionQueue.TryEnqueue(ActionKey.Down, () => GameEvents.RequestMove(Direction.Down.ToArray()));
         }
     }
 
@@ -282,101 +285,40 @@ public class MovementState : IGameState
 
     }
 
-    public void HandleInput()
-    {
 
-    }
 }
 public class FreezeState : IGameState
 {
-    private readonly GridManager gridManager;
-    public FreezeState(GridManager gridManager)
+
+    public FreezeState( )
     {
-        this.gridManager = gridManager;
+      
     }
     public void Enter()
     {
-        try
-        {
-            // remove - pass score updates as events?
-            GameEvents.CountShape(gridManager.currentShape.shapeType);
-           
-
-        } catch (Exception ex)
-        {
-            Renderer.RenderDebug( $"Increment Shape count failed: {ex}", 15);
-        }
-        // refactor
-
-        GameEvents.ClearShape();
-    }
-    public void Update(int currentFrame)
-    {
-        // refactor
-        // remove - statemachine updates to be handled via event and will pass in gridmanager
-        if (gridManager.CheckClearRow())
-        {
-            GameEvents.ChangeState(GameState.ClearRow);
-           
-        }
-        else
-        {
-            GameEvents.ChangeState(GameState.Spawn);
-        }
         
-
-    }
-
-    public void Exit()
-    {
-
-    }
-
-    public void HandleInput()
-    {
-
-    }
-}
-
-public class ClearRowState : IGameState
-{
-    private readonly GridManager gridManager;
-    public ClearRowState(GridManager gridManager)
-    {
-        this.gridManager = gridManager;
-    }
-    public void Enter()
-    {
-        // remove rw event
-        GameEvents.ScoreClearRows(gridManager.rowsToClear.Count);
-
-        GameEvents.ShiftDown();
     }
     public void Update(int currentFrame)
     {
-                                                                                                                                                                                                                       
-        // remove rw event
-        GameEvents.ChangeState(GameState.Spawn);
+        GameEvents.RequestCheckAndClearRows();
     }
 
     public void Exit()
     {
-        // remove - just accesses grid manager
-        gridManager.EmptyRowsToClear();
-    }
-
-    public void HandleInput()
-    {
 
     }
+
+
 }
+
+
 
 public class PauseState : IGameState
 {
-    private readonly GridManager gridManager;
-    public PauseState(GridManager gridManager)
+
+    public PauseState( )
     {
-        this.gridManager = gridManager;
+        
     }
     public void Enter()
     {
@@ -392,17 +334,13 @@ public class PauseState : IGameState
 
     }
 
-    public void HandleInput()
-    {
-
-    }
 }
 public class EndState : IGameState
 {
-    private readonly GridManager gridManager;
-    public EndState(GridManager gridManager)
+
+    public EndState()
     {
-        this.gridManager = gridManager;
+       
     }
     public void Enter()
     {
@@ -418,15 +356,11 @@ public class EndState : IGameState
 
     }
 
-    public void HandleInput()
-    {
-
-    }
 }
 
 #endregion
 
-
+#region Enums
 public enum GameState
 {
     Start,
@@ -448,17 +382,23 @@ public enum ShapeType
     L
 }
 
-public enum MoveOption
+public enum ActionKey
 {
-    Move,
-    Bounds,
-    Freeze
+    Up,
+    Down,
+    Left,
+    Right,
+    Rotate,
+    Render,
+    Count
 }
+
+#endregion
 
 public class Config
 {
     public const int gridWidth = 10;
-    public const int gridHeight = 20;
+    public const int gridHeight = 23;
     public const int renderWidth = 10;
     public const int renderHeight = 20;
     public const int bufferHeight = 129;
@@ -487,7 +427,7 @@ public class Config
 public class Shape
 {
     public ConsoleColor shapeColor { get; private set; }
-    public int[] coordinates { get; private set; }
+
     public List<int[]>? coordinateList { get; private set; }
     public Dictionary<int, List<int[]>> coordinateDictionary { get; private set; }
     public ShapeType shapeType { get; private set; }
@@ -660,99 +600,213 @@ public class Shape
 #endregion
 
 }
-public class GridManager
+
+public class ShapeController
 {
-    public int[] spawnCoordinate { get; private set; }
-    public Shape? currentShape { get; private set; } = null;
-
-    public List<Cell> shapeCells { get; private set; } = new(); // cells that currently contain a part of the Shape
-
-    public List<Row> rows { get; private set; } = new();
-
-    public List<Row> rowsToClear { get; private set; } = new();
-    private List<int[]> currentShapeCoordinates { get; set; }
-
-    private Dictionary<(int, int), Cell> _cells = new(); // for cell lookup
-
-
-
-    public GridManager()
+    private Grid grid;
+    public Shape? CurrentShape {  get; private set; }
+    // Where the shape initially spawns and then changes rotate coordinates relative to
+    private int[] spawnCoordinate;
+    private List<Cell> shapeCells;
+    public ShapeController(Grid grid)
     {
-        GameEvents.OnRequestMove += Move;
+        this.grid = grid;
+        spawnCoordinate = Config.startingCellCoordinate;
+        GameEvents.OnRequestMove += TryMove;
         GameEvents.OnRequestRotate += TryRotateShape;
-        GameEvents.OnShiftDown += ShiftDown;
-        GameEvents.OnClearShape += ClearCurrentShape;
-        CreateCells();
+        GameEvents.OnRequestSpawnShape += SpawnShape;
+        GameEvents.OnStateChange += ScoreShape;
+        GameEvents.OnStateChange += ResetSpawnCoordinate;
+
+    }
+    public void SpawnShape()
+    {
+        SetCurrentShape(NewShape());
+        SetShapeCells(CurrentShape);
+    }
+    public Shape NewShape()
+    {
+        return new Shape((ShapeType)GetRandomShapeType());
+        //     return new Shape(ShapeType.S);
+    }
+    public void SetCurrentShape(Shape shape) 
+    {
+        CurrentShape = shape;
+
+    }
+
+    private void ScoreShape(GameState gameState)
+    {
+        if(gameState == GameState.Freeze)
+        {
+            ActionQueue.TryEnqueue( ActionKey.Count,() => GameEvents.CountShape(CurrentShape.shapeType));
+        }
+    }
+
+    private void TryMove(int[] direction)
+    {
+        List<Cell> oldShapeCells = new(shapeCells);
+        foreach(Cell cell in shapeCells)
+        {
+            int newX = cell.location.Item1 + direction[0];
+            int newY = cell.location.Item2 + direction[1];
+
+            Cell? newCell = grid.GetCell((newX,newY));
+
+            if(newX < 0 || newY < 0 || newX == Config.gridWidth || newY == Config.gridHeight || (newCell.HasShape() && newCell.shape != CurrentShape))
+            {
+                if(direction[0] != 0)
+                {
+                    Renderer.RenderDebug("Bounds", 10);
+                    
+                }
+                else
+                {
+                    GameEvents.RequestChangeState(GameState.Freeze);
+                }
+                return;
+            } 
+        }
+
+        Move(direction);
+
+        foreach(Cell cell in oldShapeCells)
+        {
+            if (!shapeCells.Contains(cell))
+            {
+                cell.Deactivate();
+            }
+        }
+
+        
+    }
+
+    private void Move(int[] direction)
+    {
+        SetSpawnCoordinate(new int[] { spawnCoordinate[0] + direction[0], spawnCoordinate[1] + direction[1] });
+
+        List<Cell> cells = new();
+        foreach (Cell cell in shapeCells)
+        {
+         //   cell.Deactivate();
+            int newX = cell.location.Item1 + direction[0];
+            int newY = cell.location.Item2 + direction[1];
+            Cell activateCell = grid.GetCell((newX, newY));
+            activateCell.Activate(CurrentShape);
+            cells.Add(activateCell);
+        }
+
+        shapeCells = cells;
+    }
+    private void SetShapeCells(Shape shape)
+    {
+        shapeCells = new();
+        foreach (int[] coordinate in shape.coordinateList)
+        {
+            Cell shapeCell = grid.GetCell((coordinate[0] + spawnCoordinate[0], coordinate[1] + spawnCoordinate[1]));
+            shapeCells.Add(shapeCell);
+            shapeCell.Activate(shape);
+            //ActionQueue.TryEnqueue(() => GameEvents.RequestCellRender(shapeCell));
+        }
+    }
+
+    private static int GetRandomShapeType()
+    {
+        Random rand = new();
+        int randomShape = rand.Next(0, Enum.GetValues(typeof(ShapeType)).Length);
+        return randomShape;
+    }
+    public void TryRotateShape()
+    {
+        int findRotation = FindNextValidShapeRotation();
+
+        if (findRotation != -1)
+        {
+            RotateShape(findRotation);
+            foreach(Cell cell in shapeCells)
+            {
+                cell.Deactivate();
+            }
+            SetShapeCells(CurrentShape); 
+
+
+        }
+    }
+    public int FindNextValidShapeRotation()
+    {
+        int rotationCheck = CurrentShape.rotation;
+
+        for (int i = 0; i < CurrentShape.coordinateDictionary.Count; i++)
+        {
+            if (rotationCheck + 1 == CurrentShape.coordinateDictionary.Count)
+            {
+                rotationCheck = 0;
+            }
+            else
+            {
+                rotationCheck += 1;
+            }
+
+            if (CurrentShape.coordinateDictionary.TryGetValue(rotationCheck, out List<int[]> coordinates))
+            {
+                foreach (int[] coordinate in coordinates)
+                {
+                    int newX = coordinate[0] + spawnCoordinate[0];
+                    int newY = coordinate[1] + spawnCoordinate[1];
+
+                    Cell? newCell = grid.GetCell((newX, newY));
+
+                    if (newX < 0 || newY < 0 || newX == Config.gridWidth || newY == Config.gridHeight || (newCell.HasShape() && newCell.shape != CurrentShape))
+                    {
+                        return -1;
+                    }
+                }
+
+                return rotationCheck;
+            }
+            else
+            {
+                throw new Exception("Invalid rotation");
+            }
+
+
+        }
+
+        return -1;
+    }
+    public void RotateShape(int rotation)
+    {
+        CurrentShape.SetRotation(rotation);
     }
 
     public void SetSpawnCoordinate(int[] input)
     {
         spawnCoordinate = input;
     }
-    public Cell GetCell((int, int) input)
+
+    private void ResetSpawnCoordinate(GameState state)
     {
-        if (_cells.TryGetValue(input, out Cell value))
+        if(state == GameState.Spawn)
         {
-            return value;
-        }
-        else
-        {
-            throw new Exception($"No cell found at {input}");
+        SetSpawnCoordinate(Config.startingCellCoordinate);
+
         }
     }
-    public void ClearCurrentShape()
-    {
-        currentShape = null;
-        shapeCells.Clear();
-        currentShapeCoordinates.Clear();
-    }
-    public void DeactivateShapeCells()
-    {
-        foreach (Cell cell in shapeCells)
-        {
-            cell.Deactivate();
-        }
-    }
-    public void SetCurrentShape(Shape shape)
-    {
-        currentShape = shape;
-    }
 
-    public void SetCurrentShapeCoordinates()
-    {
-        currentShapeCoordinates = new List<int[]>();
-        foreach (int[] coordinate in currentShape.coordinateList)
-        {
-            currentShapeCoordinates.Add(coordinate.Zip(spawnCoordinate, (a, b) => a + b).ToArray());
-        }
+}
 
-    }
 
-    public void ActivateShapeCells()
+
+public class Grid
+{
+    public List<Row> rows { get; private set; } = new();
+    private Dictionary<(int, int), Cell> cells = new(); // for cell lookup
+    public Grid()
     {
 
-        for (int i = 0; i < currentShapeCoordinates.Count; i++)
-        {
-            try
-            {
-                Cell cell = GetCell((currentShapeCoordinates[i][0], currentShapeCoordinates[i][1]));
-
-                cell.Activate(currentShape);
-                shapeCells.Add(cell);
-
-
-            } catch (Exception ex)
-            {
-                Renderer.RenderDebug($"Exception caught: {ex.Message}", 15);
-                throw;
-                // throw new Exception($"Cell not found at coordinate {currentShapeCoordinates[i][0]},{currentShapeCoordinates[i][1]}");
-
-            }
-        }
-
-
+        CreateCellsAndRows();
     }
-    void CreateCells()
+    void CreateCellsAndRows()
     {
         for (int i = 0; i < Config.gridHeight; i++)
         {
@@ -760,104 +814,43 @@ public class GridManager
             rows.Add(row);
             for (int j = 0; j < Config.gridWidth; j++)
             {
-                Cell cell = new(j, i);
-                _cells.Add((j, i), cell);
+                ConsoleColor defaultCellColor = (i < 3) ? ConsoleColor.Gray : ConsoleColor.Black;
+                Cell cell = new(j, i, defaultCellColor); 
+                cells.Add((j, i), cell);
                 row.addCell(cell);
+                cell.SetRenderFlag(true);
             }
         }
 
     }
-    public void Move(int[] direction)
+    public Cell? GetCell((int, int) input)
     {
-
-        switch (MoveValidate(direction))
+        if (cells.TryGetValue(input, out Cell cell))
         {
-            case MoveOption.Move:
-
-
-
-                SetSpawnCoordinate(new int[] { spawnCoordinate[0] + direction[0], spawnCoordinate[1] + direction[1] });
-                break;
-            case MoveOption.Bounds:
-
-                break;
-            case MoveOption.Freeze:
-                GameEvents.ChangeState (GameState.Freeze);
-
-                break;
+            return cell;
+        }
+        else
+        {
+            return null;
         }
     }
-    private MoveOption MoveValidate(int[] direction)
+    public bool IsCellOccupied(int x, int y) => cells[(x, y)].HasShape();
+}
+
+public class RowManager
+{
+    private Grid grid;
+
+    public RowManager(Grid grid)
     {
-        // Validate if within bounds
-        int i = 0;
-        //Renderer.RenderDebug("MoveValidate Reached", 11);
-        foreach (int[] coordinate in currentShapeCoordinates)
-        {
-            i++;
-            int xResult = coordinate[0] + direction[0];
-            int yResult = coordinate[1] + direction[1];
+        GameEvents.OnRequestCheckAndClearRows += CheckAndClearRows;
+        this.grid = grid;
 
-
-            // Validate that movement is within the grid, other than at the bottom
-            if (xResult < 0 || yResult < 0 || xResult == Config.gridWidth)
-            {
-
-                return MoveOption.Bounds;
-            }
-            // If movement is to bottom on grid, set a flag 
-            if (yResult == Config.gridHeight)
-            {
-                return MoveOption.Freeze;
-            }
-
-            bool cellMoveValidity = CheckCellMoveValidity(xResult, yResult);
-
-
-            Cell checkCell = GetCell((xResult, yResult));
-
-            if (!cellMoveValidity)
-                //checkCell.HasShape() && checkCell.shape != currentShape)
-            {
-                if (direction[0] != 0)
-                {
-                    return MoveOption.Bounds;
-
-                }
-                else
-                {
-                    return MoveOption.Freeze;
-                }
-            }
-
-        }
-        return MoveOption.Move;
     }
-
-    public bool CheckCellMoveValidity(int xInput, int yInput)
+    public void CheckAndClearRows()
     {
-        try
-        {
-            Cell checkCell = GetCell((xInput, yInput));
-            if(checkCell.HasShape() && checkCell.shape != currentShape)
-            {
-                return false;
-            }
-
-            return true;
-
-        } catch (Exception ex)
-        {
-
-            return false;
-        }
-    }
-
-
-    public bool CheckClearRow()
-    {
-
-        foreach (Row row in rows)
+        List<Row> rowsToClear = new List<Row>();
+        foreach (Row row in grid.rows)
         {
             int i = 0;
             foreach (Cell cell in row.cells)
@@ -866,7 +859,6 @@ public class GridManager
                 if (check)
                 {
                     i++;
-
                 }
             }
             if (i == Config.gridWidth)
@@ -875,26 +867,27 @@ public class GridManager
             }
         }
 
+        
         if (rowsToClear.Count > 0)
         {
-            return true;
+            GameEvents.ScoreClearRows(rowsToClear.Count);
+            ShiftDown(rowsToClear);
         }
+        GameEvents.RequestChangeState(GameState.Spawn);
 
-        return false;
+        
     }
-    public void ShiftDown()
+    public void ShiftDown(List<Row> rows)
     {
       //  for(int i = rowsToClear.Count - 1; i >= 0; i--)
-        for (int i = 0; i < rowsToClear.Count; i++)
+        for (int i = 0; i < rows.Count; i++)
             {
-            Row clearRow = rowsToClear[i];
+            Row clearRow = rows[i];
             int clearRowNumber = clearRow.y;
             
-            
-       
-            for(int j = rows.Count - 1; j >= 0; j--)
+            for(int j = grid.rows.Count - 1; j >= 0; j--)
             {
-                Row row = rows[j];
+                Row row = grid.rows[j];
                 if(row.y > clearRow.y)
                 {
                     continue;
@@ -910,7 +903,7 @@ public class GridManager
                 {
                     foreach (Cell cell in row.cells)
                     {
-                        Cell copyCell = GetCell(((cell.location.Item1), cell.location.Item2 - 1));
+                        Cell copyCell = grid.GetCell(((cell.location.Item1), cell.location.Item2 - 1));
                         cell.CopyAttributes(copyCell);
                         copyCell.Deactivate();
                         
@@ -920,83 +913,7 @@ public class GridManager
             }
         }
     }
-    public void EmptyRowsToClear()
-        {
-            rowsToClear.Clear();
-        }
-    
-    public void TryRotateShape()
-    {
-        int findRotation = FindNextValidShapeRotation();
-
-        if (findRotation != -1)
-        {
-            RotateShape(findRotation);
-        }
-    }
-    public int FindNextValidShapeRotation()
-    {
-        int rotationCheck = currentShape.rotation; 
-
-        for(int i = 0; i < currentShape.coordinateDictionary.Count; i++)
-        {
-            if(rotationCheck + 1 == currentShape.coordinateDictionary.Count)
-            {
-                rotationCheck = 0;
-            }
-            else
-            {
-                rotationCheck += 1;
-            }
-
-            if(currentShape.coordinateDictionary.TryGetValue(rotationCheck, out List<int[]> coordinates))
-            {
-                foreach (int[] coordinate in coordinates)
-                {
-                    int xResult = coordinate[0] + spawnCoordinate[0];
-                    int yResult = coordinate[1] + spawnCoordinate[1];
-                    bool validMoveCell = CheckCellMoveValidity(xResult, yResult);
-                    if (!validMoveCell)
-                    {
-                        return -1;
-                    }
-                }
-
-                return rotationCheck;
-            }
-            else
-            {
-                throw new Exception("Invalid rotation");
-            }
-
-            
-        }
-        
-        return -1;
-    }
-
-    public void RotateShape(int rotation)
-    {
-        currentShape.SetRotation(rotation);
-    }
-
- 
-    public Shape NewShape()
-    {
-        return new Shape((ShapeType)GetRandomShapeType());
-        //     return new Shape(ShapeType.S);
-    }
-
-
-    private static int GetRandomShapeType()
-    {
-        Random rand = new();
-        int randomShape = rand.Next(0, Enum.GetValues(typeof(ShapeType)).Length);
-        return randomShape;
-    }
-
 }
-
 public class Cell
 {
     public (int, int) location { get; private set; } // location on grid
@@ -1004,21 +921,20 @@ public class Cell
     public bool Active { get; private set; } = false;
 
 
-    public bool renderFlag { get; private set; } = true;
+    public bool renderFlag { get; private set; }
     
     public Shape? shape { get; private set; }
 
 
-    public static ConsoleColor defaultCellColor = ConsoleColor.Black;
-    public ConsoleColor cellColor { get; private set; } = defaultCellColor;
-
-    public static Dictionary<(int, int), Cell> cells = new(); // for cell lookup
-    public static List<Cell> startingCells = new(); // Cells selected prior to running game
+    public ConsoleColor defaultCellColor { get; private set; }
+    public ConsoleColor cellColor { get; private set; }
 
 
-    public Cell(int x, int y)
+    public Cell(int x, int y, ConsoleColor defaultCellColor)
     {
         location = (x, y);
+        this.defaultCellColor = defaultCellColor;
+        this.cellColor = defaultCellColor;
         
     }
 
@@ -1037,13 +953,19 @@ public class Cell
         Active = false;
         ClearCell();
         SetRenderFlag(true);
-
-
     }
+
+    // refactor to add cell to render to the queue
 
     public void SetRenderFlag(bool input)
     {
         renderFlag = input;
+
+        if(input)
+        {
+            ActionQueue.Enqueue(ActionKey.Render,() => GameEvents.RequestCellRender(this));
+        }
+
     }
 
 
@@ -1085,6 +1007,7 @@ public class Cell
         cellColor = defaultCellColor;
     }
 
+    // refactor
     public void CopyAttributes(Cell cell)
     {
         shape = cell.shape;
@@ -1190,20 +1113,26 @@ public class GameData
     public class Renderer
 {
    
-    readonly GridManager _gridManager;
 
     readonly GameData gameData;
-    public Renderer(GridManager gridManager, GameData gameData)
+
+    private HashSet<Cell> renderCells = new();
+
+    public Renderer(GameData gameData)
     {
-        _gridManager = gridManager;
+        
         this.gameData = gameData;
+        GameEvents.OnRequestCellRender += StoreRenderCell;
+        // set the cells to render the first time
     }
     public void RenderGrid()
     {
         for (int h = -1; h < Config.gridHeight; h++)
-        {
-            for (int w = -1; w < Config.gridWidth; w++)
+           
             {
+            for (int w = -1; w < Config.gridWidth; w++)
+              
+                {
                 Console.BackgroundColor = ConsoleColor.Black;
                 SetCursor(w + 1, h + 1);
 
@@ -1226,74 +1155,44 @@ public class GameData
                     }
                     else
                     {
-                        try
-                        {
-                            Cell cell = _gridManager.GetCell((w, h));
-                            if (cell.renderFlag)
-                            {
-                                try
-                                {
-                                    RenderCell(cell); 
-                                }
-                                catch
-                                {
-
-                                    Renderer.RenderDebug($"Cannot render cell {w},{h}", 20);
-                                }
-                                try
-                                {
-                                    cell.SetRenderFlag(false);
-                                }
-                                catch
-                                {
-                                    Renderer.RenderDebug($"Cannot set render flag {w},{h}", 21);
-                                }
-
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                           
-                        }
-
+                        Write(".");
                     }
 
                 }
 
-
             }
+
         }
     }
-
-
-    public void RenderCell(Cell input)
-    {
-        // SetCursor(input.location.Item1, input.location.Item2);
-
-
-    
-            Console.BackgroundColor = input.cellColor;
-            Console.Write(".");
-        
-       /* else
-        {
-            Console.BackgroundColor = ConsoleColor.Black;
-            Console.Write(".");
-        } */
-    }
-
     private void SetCursor(int x, int y)
     {
         SetCursorPosition(x, y);
     }
+    void StoreRenderCell(Cell cell) => renderCells.Add(cell);
+    public void RenderCells()
+    {
+        foreach(Cell cell in renderCells)
+        {
+            RenderCell(cell);
+            
+        }
 
+        renderCells.Clear();
+    }
+    private void RenderCell(Cell cell)
+    {
+            // set cursor with offset to account for border
+            SetCursor(cell.location.Item1 + 1, cell.location.Item2 + 1);
+            Console.BackgroundColor = cell.cellColor;
+            Console.Write(".");
+            cell.SetRenderFlag(false);
+    }
     public static void RenderDebug(string text, int line)
     {
         Console.BackgroundColor = ConsoleColor.Black;
         SetCursorPosition(Config.renderWidth + 5, line);
         Console.Write(text);
     }
-
     public void RenderControls()
     {
         // Needs refactoring to improve flexibility
@@ -1307,7 +1206,6 @@ public class GameData
         Renderer.RenderDebug("Quit: Esc", 7);
 
     }
-
     public void RenderGameData()
     {
         Renderer.RenderDebug($"Level: {gameData.level}", 0);
@@ -1324,10 +1222,10 @@ public class GameData
 }
 public class InputManager
 {
-    private GridManager _gridManager { get; set; }
+    private Grid _gridManager { get; set; }
     private DateTime lastMoveTime = DateTime.MinValue;
-    private TimeSpan moveCooldown = TimeSpan.FromMilliseconds(75);
-    public InputManager(GridManager gridManager)
+    private TimeSpan moveCooldown = TimeSpan.FromMilliseconds(70);
+    public InputManager(Grid gridManager)
     {
         _gridManager = gridManager;
     }
@@ -1343,7 +1241,7 @@ public class InputManager
                 ProcessKeyInput(key);
                 
             }
-                await Task.Delay(15);
+                await Task.Delay(20);
 
         }
     }
@@ -1358,16 +1256,16 @@ public class InputManager
         switch (key.Key)
         {
             case ConsoleKey.A:
-                ActionQueue.Enqueue(() => GameEvents.RequestMove(Direction.Left.ToArray()));
+                ActionQueue.TryEnqueue(ActionKey.Left,() => GameEvents.RequestMove(Direction.Left.ToArray()));
                 break;
             case ConsoleKey.D:
-                ActionQueue.Enqueue(() => GameEvents.RequestMove(Direction.Right.ToArray()));
+                ActionQueue.TryEnqueue(ActionKey.Right, () => GameEvents.RequestMove(Direction.Right.ToArray()));
                 break;
             case ConsoleKey.S:
-                ActionQueue.Enqueue(() => GameEvents.RequestMove(Direction.Down.ToArray()));
+                ActionQueue.TryEnqueue(ActionKey.Down, () => GameEvents.RequestMove(Direction.Down.ToArray()));
                 break;
             case ConsoleKey.W:
-                ActionQueue.Enqueue(() => GameEvents.RequestRotate());
+                ActionQueue.TryEnqueue(ActionKey.Rotate, () => GameEvents.RequestRotate());
                 break;
             default:
                 break;
