@@ -4,6 +4,8 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Tetris.Domain;
+using Tetris.Common;
+
 
 namespace Tetris.Core
 {
@@ -38,7 +40,7 @@ namespace Tetris.Core
             if (DateTime.Now - lastMoveTime < moveCooldown)
                 return; // Prevents spamming moves before previous moves finish processing
 
-            lastMoveTime = DateTime.Now; // Reset cooldown timer
+            lastMoveTime = DateTime.Now; // Reset cooldown refreshTimer
 
             switch (key.Key)
             {
@@ -53,6 +55,9 @@ namespace Tetris.Core
                     break;
                 case ConsoleKey.W:
                     ActionQueue.TryEnqueue(ActionKey.Rotate, () => GameEvents.RequestRotate());
+                    break;
+                case ConsoleKey.Spacebar:
+                    ActionQueue.TryEnqueue(ActionKey.Drop, () => GameEvents.RequestDrop());
                     break;
                 default:
                     break;

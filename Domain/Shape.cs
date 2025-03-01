@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Tetris.Common;
 
 namespace Tetris.Domain
 {
@@ -70,7 +71,7 @@ namespace Tetris.Domain
 
                 default:
                     throw new ArgumentException("No ShapeType provided");
-                    break;
+                    
             }
 
 
@@ -78,7 +79,7 @@ namespace Tetris.Domain
 
         public void SetRotation(int input)
         {
-            if (coordinateDictionary.TryGetValue(input, out List<int[]> output))
+            if (coordinateDictionary.TryGetValue(input, out List<int[]>? output))
             {
 
                 coordinateList = output;

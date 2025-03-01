@@ -16,9 +16,9 @@ namespace Tetris.States
         }
         public void Enter()
         {
-
+            GameEvents.RequestPause();
         }
-        public void Update(int currentFrame)
+        public void Update(long currentFrame)
         {
 
         }

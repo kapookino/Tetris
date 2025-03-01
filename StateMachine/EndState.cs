@@ -18,7 +18,7 @@ namespace Tetris.States
         {
 
         }
-        public void Update(int currentFrame)
+        public void Update(long currentFrame)
         {
 
         }

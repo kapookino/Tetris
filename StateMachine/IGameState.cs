@@ -10,7 +10,7 @@ namespace Tetris.States
     public interface IGameState
     {
         void Enter();
-        void Update(int currentFrame);
+        void Update(long currentFrame);
         void Exit();
 
     }

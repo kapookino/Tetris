@@ -30,8 +30,12 @@ using Tetris.Core;
 using Tetris.States;
 using Tetris.Domain;
 using Tetris.Render;
+using Tetris.Common;
 
-Config config = new();
+CursorVisible = false;
+SetBufferSize(Config.bufferWidth, Config.bufferHeight);
+SetWindowSize(Config.windowWidth, Config.windowHeight);
+
 GameData gameData = new();
 Renderer renderer = new(gameData);
 Grid grid = new();
@@ -47,43 +51,14 @@ await game.RunGame();
 
 
 #region Enums
-public enum GameState
-{
-    Start,
-    Spawn,
-    Movement,
-    Freeze,
-    Pause,
-    End
-}
-public enum ShapeType
-{
-    I,
-    O,
-    T,
-    S,
-    Z,
-    J,
-    L
-}
 
-public enum ActionKey
-{
-    Up,
-    Down,
-    Left,
-    Right,
-    Rotate,
-    Render,
-    Count
-}
 
 #endregion
 
-public class Config
+public static class Config
 {
     public const int gridWidth = 10;
-    public const int gridHeight = 23;
+    public const int gridHeight = 20;
     public const int renderWidth = 10;
     public const int renderHeight = 20;
     public const int bufferHeight = 129;
@@ -91,94 +66,6 @@ public class Config
     public const int windowWidth = 129;
     public const int windowHeight = 129;
     public static int[] startingCellCoordinate { get; private set; } = { 3, 0 };
-
-    public Config()
-    {
-        SetConsoleConfig();
-    }
-
-    static void SetConsoleConfig()
-    {
-
-        CursorVisible = false;
-        SetBufferSize(Config.bufferWidth, Config.bufferHeight);
-        SetWindowSize(Config.windowWidth, Config.windowHeight);
-    }
-
-
-}
-
-
-public class GameData
-{
-    public int score { get; private set; } = 0;
-    public int level { get; private set; } = 1;
-    public int IShapes { get; private set; } = 0;
-    public int OShapes { get; private set; } = 0;
-    public int TShapes { get; private set; } = 0;
-    public int SShapes { get; private set; } = 0;
-    public int ZShapes { get; private set; } = 0;
-    public int JShapes { get; private set; } = 0;
-    public int LShapes { get; private set; } = 0;
-
-    public GameData()
-    {
-        GameEvents.OnScoreClearRows += ScoreRows;
-        GameEvents.OnCountShape += IncrementShapeCounts;
-    }
-
-    public void ScoreRows(int rows)
-    {
-        switch (rows)
-        {
-            case 0:
-                break;
-            case 1:
-                score += 40 * level;
-                break;
-            case 2:
-                score += 100 * level;
-                break;
-            case 3:
-                score += 300 * level;
-                break;
-            case 4:
-                score += 1200 * level;
-                break;
-            default:
-                break;
-        }
-    }
-
-    public void IncrementShapeCounts(ShapeType input)
-    {
-        switch (input)
-        {
-            case ShapeType.I:
-                IShapes++;
-                break;
-            case ShapeType.O:
-                OShapes++;
-                break;
-            case ShapeType.T:
-                TShapes++;
-                break;
-            case ShapeType.S:
-                SShapes++;
-                break;
-            case ShapeType.Z:
-                ZShapes++;
-                break;
-            case ShapeType.J:
-                JShapes++;
-                break;
-            case ShapeType.L:
-                LShapes++;
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(input), $"Unexpected ShapeType: {input}");
-        }
-    }
 
 }
 

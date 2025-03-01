@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Tetris.Core;
+using Tetris.Common;
 
 namespace Tetris.Domain
 {
@@ -17,7 +18,7 @@ namespace Tetris.Domain
             this.grid = grid;
 
         }
-        public void CheckAndClearRows()
+        private void CheckAndClearRows()
         {
             List<Row> rowsToClear = new List<Row>();
             foreach (Row row in grid.rows)
@@ -47,7 +48,7 @@ namespace Tetris.Domain
 
 
         }
-        public void ShiftDown(List<Row> rows)
+        private void ShiftDown(List<Row> rows)
         {
             //  for(int i = rowsToClear.Count - 1; i >= 0; i--)
             for (int i = 0; i < rows.Count; i++)
@@ -71,9 +72,9 @@ namespace Tetris.Domain
                     }
                     else
                     {
-                        foreach (Cell cell in row.cells)
+                        foreach (Cell? cell in row.cells)
                         {
-                            Cell copyCell = grid.GetCell(((cell.location.Item1), cell.location.Item2 - 1));
+                            Cell? copyCell = grid.GetCell(((cell.location.Item1), cell.location.Item2 - 1));
                             cell.CopyAttributes(copyCell);
                             copyCell.Deactivate();
 

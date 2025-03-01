@@ -15,11 +15,11 @@ namespace Tetris.States
         }
         public void Enter()
         {
+            GameEvents.RequestCheckAndClearRows();
 
         }
-        public void Update(int currentFrame)
+        public void Update(long currentFrame)
         {
-            GameEvents.RequestCheckAndClearRows();
         }
 
         public void Exit()

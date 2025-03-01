@@ -5,10 +5,11 @@ using System.Text;
 using System.Threading.Tasks;
 using Tetris.Core;
 using Tetris.Domain;
+using Tetris.Common;
 
 namespace Tetris.Render
 {
-    public class Renderer
+    internal class Renderer
     {
 
 
@@ -28,6 +29,8 @@ namespace Tetris.Render
         }
         public void RenderGrid()
         {
+            string tetris = "**TETRIS**";
+         
             for (int h = -1; h < Config.gridHeight; h++)
 
             {
@@ -35,57 +38,48 @@ namespace Tetris.Render
 
                 {
                     Console.BackgroundColor = ConsoleColor.Black;
-                    SetCursor(w + 1, h + 1);
+                    SetCursorPosition(w + 1, h + 1);
 
-                    // handle first cell
-                    if (w == -1 && h == -1)
-                    {
-                        Write(" ");
-                    }
-                    else
-                    {
+
 
                         if (w == -1)
                         {
-                            Write((h) % 10);
+                            Write('|');
                         }
                         else if (h == -1)
                         {
 
-                            Write((w) % 10);
+                            Write(tetris[w] ); 
                         }
                         else
                         {
                             Write(".");
                         }
 
-                    }
-
+                    
+                    Write('|');
                 }
 
             }
+           
+            
         }
-        private void SetCursor(int x, int y)
-        {
-            SetCursorPosition(x, y);
-        }
+
         void StoreRenderCell(Cell cell) => renderCells.Add(cell);
         public void RenderCells()
         {
             foreach (Cell cell in renderCells)
             {
                 RenderCell(cell);
-
             }
-
             renderCells.Clear();
         }
         private void RenderCell(Cell cell)
         {
             // set cursor with offset to account for border
-            SetCursor(cell.location.Item1 + 1, cell.location.Item2 + 1);
+            SetCursorPosition(cell.location.Item1 + 1, cell.location.Item2 + 1);
             Console.BackgroundColor = cell.cellColor;
-            Console.Write(".");
+            Console.Write(" ");
             cell.SetRenderFlag(false);
         }
         public static void RenderDebug(string text, int line)
@@ -109,7 +103,7 @@ namespace Tetris.Render
         }
         public void RenderGameData()
         {
-            Renderer.RenderDebug($"Level: {gameData.level}", 0);
+            Renderer.RenderDebug($"Level: {GameData.level}", 0);
             Renderer.RenderDebug($"Score: {gameData.score}", 1);
             Renderer.RenderDebug($"I: {gameData.IShapes}", 2);
             Renderer.RenderDebug($"O: {gameData.OShapes}", 3);

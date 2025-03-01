@@ -10,7 +10,7 @@ namespace Tetris.Domain
     {
         public int y { get; private set; }
 
-        public List<Cell> cells;
+        public List<Cell> cells { get; private set; }
 
         public Row(int input)
         {

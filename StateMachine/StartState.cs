@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Tetris.Core;
+using Tetris.Common;
 
 namespace Tetris.States
 {
@@ -18,7 +19,7 @@ namespace Tetris.States
         {
 
         }
-        public void Update(int currentFrame)
+        public void Update(long currentFrame)
 
 
         {

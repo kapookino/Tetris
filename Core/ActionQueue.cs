@@ -4,14 +4,15 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Tetris.Common;
 
 namespace Tetris.Core
 
 {
     internal static class ActionQueue
     {
-        private static ConcurrentQueue<(ActionKey actionKey, Action action)> _actions = new();
         private static ConcurrentDictionary<ActionKey, bool> _uniqueActions = new();
+        private static ConcurrentQueue<(ActionKey actionKey, Action action)> _actions = new();
 
         public static void TryEnqueue(ActionKey actionKey, Action action)
         {
@@ -32,6 +33,8 @@ namespace Tetris.Core
             bool moveDownOccurred = false;
             while (_actions.TryDequeue(out var action))
             {
+
+                // Ensure that a Down movement action prevents further inputs
                 if (moveDownOccurred && (action.Item1 is ActionKey.Down or ActionKey.Right or ActionKey.Left))
                 {
                     continue;
@@ -54,5 +57,4 @@ namespace Tetris.Core
             _uniqueActions.Clear();
         }
     }
-
 }

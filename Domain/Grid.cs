@@ -15,7 +15,7 @@ namespace Tetris.Domain
 
             CreateCellsAndRows();
         }
-        void CreateCellsAndRows()
+        private void CreateCellsAndRows()
         {
             for (int i = 0; i < Config.gridHeight; i++)
             {
@@ -23,7 +23,7 @@ namespace Tetris.Domain
                 rows.Add(row);
                 for (int j = 0; j < Config.gridWidth; j++)
                 {
-                    ConsoleColor defaultCellColor = (i < 3) ? ConsoleColor.Gray : ConsoleColor.Black;
+                    ConsoleColor defaultCellColor = ConsoleColor.Black;
                     Cell cell = new(j, i, defaultCellColor);
                     cells.Add((j, i), cell);
                     row.addCell(cell);
@@ -34,7 +34,7 @@ namespace Tetris.Domain
         }
         public Cell? GetCell((int, int) input)
         {
-            if (cells.TryGetValue(input, out Cell cell))
+            if (cells.TryGetValue(input, out Cell? cell))
             {
                 return cell;
             }
@@ -43,6 +43,5 @@ namespace Tetris.Domain
                 return null;
             }
         }
-        public bool IsCellOccupied(int x, int y) => cells[(x, y)].HasShape();
     }
 }

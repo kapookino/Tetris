@@ -5,38 +5,67 @@ using System.Text;
 using System.Threading.Tasks;
 using Tetris.Core;
 using Tetris.Render;
+using Tetris.Common;
 
 namespace Tetris.Domain
 {
+    /// <summary>
+    /// Manages the current tetromino piece, its movement, rotation, and collision detection
+    /// </summary>
     internal class ShapeController
     {
         private Grid grid;
+        /// <summary>The active tetromino that the player is controlling</summary>
         public Shape? CurrentShape { get; private set; }
-        // Where the shape initially spawns and then changes rotate coordinates relative to
+        
         private int[] spawnCoordinate;
         private List<Cell> shapeCells;
+        private List<ShapeType> shapeBag = new();
+
         public ShapeController(Grid grid)
         {
             this.grid = grid;
             spawnCoordinate = Config.startingCellCoordinate;
             GameEvents.OnRequestMove += TryMove;
+            GameEvents.OnRequestDrop += TryDrop;
             GameEvents.OnRequestRotate += TryRotateShape;
             GameEvents.OnRequestSpawnShape += SpawnShape;
             GameEvents.OnStateChange += ScoreShape;
             GameEvents.OnStateChange += ResetSpawnCoordinate;
+            FillShapeBag();
 
         }
-        public void SpawnShape()
+        private void SpawnShape()
         {
             SetCurrentShape(NewShape());
             SetShapeCells(CurrentShape);
         }
-        public Shape NewShape()
+        private Shape NewShape()
         {
-            return new Shape((ShapeType)GetRandomShapeType());
-            //     return new Shape(ShapeType.S);
+            ShapeType shapeType = shapeBag[0];
+            Shape shape = new(shapeType);
+            EmptyShapeBag(shapeType);
+            return shape;
         }
-        public void SetCurrentShape(Shape shape)
+
+        private void FillShapeBag()
+        {
+            foreach (ShapeType shapeType in Enum.GetValues(typeof(ShapeType)))
+            {
+                shapeBag.Add(shapeType);
+                Utils.ShuffleList(shapeBag);
+            }
+        }
+
+        private void EmptyShapeBag(ShapeType shapeType)
+        {
+            shapeBag.Remove(shapeType);
+            if (shapeBag.Count == 0)
+            {
+                FillShapeBag();
+            }
+        }
+        private void SetCurrentShape(Shape shape)
         {
             CurrentShape = shape;
 
@@ -98,7 +127,7 @@ namespace Tetris.Domain
                 //   cell.Deactivate();
                 int newX = cell.location.Item1 + direction[0];
                 int newY = cell.location.Item2 + direction[1];
-                Cell activateCell = grid.GetCell((newX, newY));
+                Cell? activateCell = grid.GetCell((newX, newY));
                 activateCell.Activate(CurrentShape);
                 cells.Add(activateCell);
             }
@@ -110,20 +139,14 @@ namespace Tetris.Domain
             shapeCells = new();
             foreach (int[] coordinate in shape.coordinateList)
             {
-                Cell shapeCell = grid.GetCell((coordinate[0] + spawnCoordinate[0], coordinate[1] + spawnCoordinate[1]));
+                Cell? shapeCell = grid.GetCell((coordinate[0] + spawnCoordinate[0], coordinate[1] + spawnCoordinate[1]));
                 shapeCells.Add(shapeCell);
                 shapeCell.Activate(shape);
                 
             }
         }
 
-        private static int GetRandomShapeType()
-        {
-            Random rand = new();
-            int randomShape = rand.Next(0, Enum.GetValues(typeof(ShapeType)).Length);
-            return randomShape;
-        }
-        public void TryRotateShape()
+        private void TryRotateShape()
         {
             int findRotation = FindNextValidShapeRotation();
 
@@ -135,11 +158,9 @@ namespace Tetris.Domain
                     cell.Deactivate();
                 }
                 SetShapeCells(CurrentShape);
-
-
             }
         }
-        public int FindNextValidShapeRotation()
+        private int FindNextValidShapeRotation()
         {
             int rotationCheck = CurrentShape.rotation;
 
@@ -154,7 +175,7 @@ namespace Tetris.Domain
                     rotationCheck += 1;
                 }
 
-                if (CurrentShape.coordinateDictionary.TryGetValue(rotationCheck, out List<int[]> coordinates))
+                if (CurrentShape.coordinateDictionary.TryGetValue(rotationCheck, out List<int[]>? coordinates))
                 {
                     foreach (int[] coordinate in coordinates)
                     {
@@ -175,18 +196,15 @@ namespace Tetris.Domain
                 {
                     throw new Exception("Invalid rotation");
                 }
-
-
             }
-
             return -1;
         }
-        public void RotateShape(int rotation)
+        private void RotateShape(int rotation)
         {
             CurrentShape.SetRotation(rotation);
         }
 
-        public void SetSpawnCoordinate(int[] input)
+        private void SetSpawnCoordinate(int[] input)
         {
             spawnCoordinate = input;
         }
@@ -196,9 +214,9 @@ namespace Tetris.Domain
             if (state == GameState.Spawn)
             {
                 SetSpawnCoordinate(Config.startingCellCoordinate);
-
             }
         }
+
 
     }
 }

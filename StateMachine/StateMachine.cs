@@ -7,6 +7,7 @@ using Tetris.Core;
 using Tetris.States;
 using Tetris.Domain;
 using Tetris.Render;
+using Tetris.Common;
 
 namespace Tetris.States
 
@@ -37,13 +38,12 @@ namespace Tetris.States
         {
             currentState?.Exit();
             currentState = states[state];
-            Renderer.RenderDebug($"Transitioning to {currentState}", 19);
             currentState.Enter();
 
 
         }
 
-        public void Update(int currentFrame)
+        public void Update(long currentFrame)
         {
             currentState.Update(currentFrame);
         }
