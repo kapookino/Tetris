@@ -1,24 +1,4 @@
-﻿/*
- * TETRIS
- * 
- * This project is to recreate the classic game of Tetris. Primary learning goals:
- * 1. Reduce reliance on Static classes by utilizing Dependency Injection
- *      - Grid and Cells need to be reworked. The "grid" class can pass in a
- *      Config class, which will hold necessary variables
- *      
- * 2. Learn more about when to use abstract classes vs interface 
- *      - Perhaps a divvying up of responsibilities, such as the shapes (or "tetronominoes") properties
- *      like location being handled by an abstract class but the movement/rotation of shapes being handled
- *      by an interface
- * 3. Improve previously used renderer by only updating changed cells (rather than a full rewrite)
- *      - Look into String Builder and better practices around buffering
- * 
- * 
- */
-
-// Shape represents the overarching "tetronomino"
-
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Data;
 using System.Diagnostics.Contracts;
@@ -31,29 +11,23 @@ using Tetris.States;
 using Tetris.Domain;
 using Tetris.Render;
 using Tetris.Common;
+using Tetris;
 
 CursorVisible = false;
 SetBufferSize(Config.bufferWidth, Config.bufferHeight);
 SetWindowSize(Config.windowWidth, Config.windowHeight);
 
+Logger logger = new();
 GameData gameData = new();
 Renderer renderer = new(gameData);
 Grid grid = new();
 RowManager rowManager = new(grid);
-ShapeController shapeController = new(grid);
+MovementHandler movementHandler = new();
+ShapeController shapeController = new(grid, movementHandler);
 StateMachine stateMachine = new();
 InputManager inputManager = new();
 Game game = new(stateMachine, inputManager);
 await game.RunGame();
-
-
-
-
-
-#region Enums
-
-
-#endregion
 
 public static class Config
 {

@@ -25,7 +25,7 @@ namespace Tetris.States
             if (currentFrame % (32 - GameData.level*2) == 0)
             {
 
-                ActionQueue.TryEnqueue(ActionKey.Down, () => GameEvents.RequestMove(Direction.Down.ToArray()));
+                ActionQueue.TryEnqueue(ActionKey.Down, () => GameEvents.RequestMove(Direction.Down.ToArray(),null));
             }
         }
 

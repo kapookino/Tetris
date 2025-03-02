@@ -45,13 +45,13 @@ namespace Tetris.Core
             switch (key.Key)
             {
                 case ConsoleKey.A:
-                    ActionQueue.TryEnqueue(ActionKey.Left, () => GameEvents.RequestMove(Direction.Left.ToArray()));
+                    ActionQueue.TryEnqueue(ActionKey.Left, () => GameEvents.RequestMove(Direction.Left.ToArray(),null));
                     break;
                 case ConsoleKey.D:
-                    ActionQueue.TryEnqueue(ActionKey.Right, () => GameEvents.RequestMove(Direction.Right.ToArray()));
+                    ActionQueue.TryEnqueue(ActionKey.Right, () => GameEvents.RequestMove(Direction.Right.ToArray(),null));
                     break;
                 case ConsoleKey.S:
-                    ActionQueue.TryEnqueue(ActionKey.Down, () => GameEvents.RequestMove(Direction.Down.ToArray()));
+                    ActionQueue.TryEnqueue(ActionKey.Down, () => GameEvents.RequestMove(Direction.Down.ToArray(),null));
                     break;
                 case ConsoleKey.W:
                     ActionQueue.TryEnqueue(ActionKey.Rotate, () => GameEvents.RequestRotate());

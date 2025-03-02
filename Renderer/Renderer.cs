@@ -105,14 +105,6 @@ namespace Tetris.Render
         {
             Renderer.RenderDebug($"Level: {GameData.level}", 0);
             Renderer.RenderDebug($"Score: {gameData.score}", 1);
-            Renderer.RenderDebug($"I: {gameData.IShapes}", 2);
-            Renderer.RenderDebug($"O: {gameData.OShapes}", 3);
-            Renderer.RenderDebug($"T: {gameData.TShapes}", 4);
-            Renderer.RenderDebug($"S: {gameData.SShapes}", 5);
-            Renderer.RenderDebug($"Z: {gameData.ZShapes}", 6);
-            Renderer.RenderDebug($"J: {gameData.JShapes}", 7);
-            Renderer.RenderDebug($"L: {gameData.LShapes}", 8);
-
         }
     }
 }

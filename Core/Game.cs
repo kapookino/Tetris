@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Timers;
+using Tetris.Common;
 using Tetris.Domain;
 using Tetris.States;
 
@@ -33,15 +34,18 @@ namespace Tetris.Core
 
         private void OnTimedEvent(object sender, System.Timers.ElapsedEventArgs e)
         {
+            GameEvents.RequestLog("Game.OnTimedEvent()","OnTimedEvent called, signaling run of action queue and rendering");
             // Process Game and Rendering
             ActionQueue.ProcessAction();
             GameEvents.RequestRenderGameData();
             GameEvents.RequestRenderCells();
 
 
-            // Run Next update
+
+
             stateMachine.Update(currentFrame); 
             currentFrame++;
+            
         }
 
         public async Task RunGame()

@@ -16,14 +16,14 @@ namespace Tetris.States
         }
         public void Enter()
         {
-
+            GameEvents.RequestLog("SpawnState.Enter()","SpawnState Entered");
+                GameEvents.SpawnShape();
 
         }
         public void Update(long currentFrame)
         {
 
-                GameEvents.SpawnShape();
-                GameEvents.RequestChangeState(GameState.Movement);
+                
             
         }
 

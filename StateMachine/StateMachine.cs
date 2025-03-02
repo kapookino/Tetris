@@ -15,8 +15,7 @@ namespace Tetris.States
     internal class StateMachine
     {
         public IGameState currentState { get; private set; }
-        private readonly Dictionary<GameState, IGameState> states;
-
+        public readonly Dictionary<GameState, IGameState> states;
         public StateMachine()
         {
 
@@ -36,6 +35,7 @@ namespace Tetris.States
 
         public void TransitionTo(GameState state)
         {
+            GameEvents.RequestLog($"StateMachine.TransitionTo({state})",$"TransitionTo called. CurrentState: {currentState}. Next state: {state}");
             currentState?.Exit();
             currentState = states[state];
             currentState.Enter();

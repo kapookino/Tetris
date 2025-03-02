@@ -13,12 +13,18 @@ namespace Tetris.Core
     {
         private static ConcurrentDictionary<ActionKey, bool> _uniqueActions = new();
         private static ConcurrentQueue<(ActionKey actionKey, Action action)> _actions = new();
+        private static GameState currentGameState;
 
         public static void TryEnqueue(ActionKey actionKey, Action action)
         {
+  
             if (_uniqueActions.TryAdd(actionKey, true))
             {
                 Enqueue(actionKey, action);
+            }
+            else
+            {
+
             }
         }
 
@@ -33,17 +39,21 @@ namespace Tetris.Core
             bool moveDownOccurred = false;
             while (_actions.TryDequeue(out var action))
             {
-
+                GameEvents.RequestLog($"ActionQueue.ProcessAction()",$"Trying to process {action}");
                 // Ensure that a Down movement action prevents further inputs
                 if (moveDownOccurred && (action.Item1 is ActionKey.Down or ActionKey.Right or ActionKey.Left))
                 {
+                    GameEvents.RequestLog($"ActionQueue.ProcessAction()", $"{action} skipped");
                     continue;
                 }
 
+                GameEvents.RequestLog($"ActionQueue.ProcessAction()", $"{action} invoked");
                 action.Item2.Invoke();
+
 
                 if (action.Item1 == ActionKey.Down)
                 {
+                    GameEvents.RequestLog($"ActionQueue.ProcessAction()", $"moveDownOccurred = true");
                     moveDownOccurred = true;
                 }
 

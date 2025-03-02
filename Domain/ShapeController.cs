@@ -17,17 +17,19 @@ namespace Tetris.Domain
         private Grid grid;
         /// <summary>The active tetromino that the player is controlling</summary>
         public Shape? CurrentShape { get; private set; }
-        
+        readonly MovementHandler movementHandler;   
         private int[] spawnCoordinate;
         private List<Cell> shapeCells;
         private List<ShapeType> shapeBag = new();
+        private int[] dropSpawnCoordinate;
 
-        public ShapeController(Grid grid)
+        public ShapeController(Grid grid, MovementHandler movementHandler)
         {
             this.grid = grid;
+            this.movementHandler = movementHandler;
             spawnCoordinate = Config.startingCellCoordinate;
             GameEvents.OnRequestMove += TryMove;
-            GameEvents.OnRequestDrop += TryDrop;
+            GameEvents.OnRequestDrop += Drop;
             GameEvents.OnRequestRotate += TryRotateShape;
             GameEvents.OnRequestSpawnShape += SpawnShape;
             GameEvents.OnStateChange += ScoreShape;
@@ -38,7 +40,16 @@ namespace Tetris.Domain
         private void SpawnShape()
         {
             SetCurrentShape(NewShape());
+            bool spawnValid = movementHandler.ValidateSpawn(spawnCoordinate, CurrentShape, grid);
             SetShapeCells(CurrentShape);
+             if(!spawnValid)
+            {
+                GameEvents.RequestChangeState(GameState.End);
+            } else
+            {
+                GameEvents.RequestChangeState(GameState.Movement);
+            }
+
         }
         private Shape NewShape()
         {
@@ -79,33 +90,37 @@ namespace Tetris.Domain
             }
         }
 
-        private void TryMove(int[] direction)
+        private void TryMove(int[] direction = null, int[] newSpawnCoordinate = null)
         {
-            List<Cell> oldShapeCells = new(shapeCells);
-            foreach (Cell cell in shapeCells)
+
+            int[] checkSpawnCoordinate = newSpawnCoordinate;
+            if(newSpawnCoordinate == null && direction == null)
             {
-                int newX = cell.location.Item1 + direction[0];
-                int newY = cell.location.Item2 + direction[1];
+                throw new Exception("TryMove needs to have either a direction or a newSpawnCoordinate");
+            }else if (newSpawnCoordinate == null)
+            {
 
-                Cell? newCell = grid.GetCell((newX, newY));
-
-                if (newX < 0 || newY < 0 || newX == Config.gridWidth || newY == Config.gridHeight || (newCell.HasShape() && newCell.shape != CurrentShape))
+                checkSpawnCoordinate = new int[] { spawnCoordinate[0] + direction[0], spawnCoordinate[1] + direction[1] };
+            } 
+            
+            // The cells to be deactivated if the movement is valid
+            List<Cell> oldShapeCells = new(shapeCells);
+            if(movementHandler.ValidateSpawn(checkSpawnCoordinate, CurrentShape, grid))
+            {
+               spawnCoordinate = checkSpawnCoordinate;
+               shapeCells = movementHandler.Move(checkSpawnCoordinate, grid, CurrentShape);
+            }
+            else
+            {
+                if (direction[0] == 0)
                 {
-                    if (direction[0] != 0)
-                    {
-                        Renderer.RenderDebug("Bounds", 10);
-
-                    }
-                    else
-                    {
-                        GameEvents.RequestChangeState(GameState.Freeze);
-                    }
+                    GameEvents.RequestChangeState(GameState.Freeze);
                     return;
                 }
+                return;
             }
 
-            Move(direction);
-
+            // Deactivate the prior cells
             foreach (Cell cell in oldShapeCells)
             {
                 if (!shapeCells.Contains(cell))
@@ -116,23 +131,38 @@ namespace Tetris.Domain
 
 
         }
-
-        private void Move(int[] direction)
+        
+        private void Drop()
         {
-            SetSpawnCoordinate(new int[] { spawnCoordinate[0] + direction[0], spawnCoordinate[1] + direction[1] });
-
-            List<Cell> cells = new();
-            foreach (Cell cell in shapeCells)
+            SetDropCoordinate();
+            TryMove(null, dropSpawnCoordinate);
+            GameEvents.RequestChangeState(GameState.Freeze);
+        }
+        private void SetDropCoordinate()
+        {
+            dropSpawnCoordinate = FindDropCoordinate();
+        }
+        // Return the int[] value corresponding to the freeze point of the active shape
+        private int[] FindDropCoordinate()
+        {
+            int[] priorSpawnCoordinate = spawnCoordinate;
+            for(int i = spawnCoordinate[1] + 1; i < Config.gridHeight; i++) 
             {
-                //   cell.Deactivate();
-                int newX = cell.location.Item1 + direction[0];
-                int newY = cell.location.Item2 + direction[1];
-                Cell? activateCell = grid.GetCell((newX, newY));
-                activateCell.Activate(CurrentShape);
-                cells.Add(activateCell);
+                int[] checkSpawnCoordinate = new int[] { spawnCoordinate[0], i };
+                bool validSpawn = movementHandler.ValidateSpawn(checkSpawnCoordinate,CurrentShape,grid);
+                if (validSpawn)
+                {
+                    priorSpawnCoordinate = checkSpawnCoordinate;
+                }
+                else
+                {
+                    return priorSpawnCoordinate;
+                }
             }
 
-            shapeCells = cells;
+            throw new Exception("No valid drop point. " +
+                "This should only be the case if the game " +
+                "should be over but should be caught earlier");
         }
         private void SetShapeCells(Shape shape)
         {
@@ -204,7 +234,7 @@ namespace Tetris.Domain
             CurrentShape.SetRotation(rotation);
         }
 
-        private void SetSpawnCoordinate(int[] input)
+        public void SetSpawnCoordinate(int[] input)
         {
             spawnCoordinate = input;
         }

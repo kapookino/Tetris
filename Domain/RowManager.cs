@@ -44,9 +44,6 @@ namespace Tetris.Domain
                 GameEvents.ScoreClearRows(rowsToClear.Count);
                 ShiftDown(rowsToClear);
             }
-            GameEvents.RequestChangeState(GameState.Spawn);
-
-
         }
         private void ShiftDown(List<Row> rows)
         {
