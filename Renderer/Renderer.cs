@@ -49,11 +49,11 @@ namespace Tetris.Render
                         else if (h == -1)
                         {
 
-                            Write(tetris[w] ); 
+                            Write(tetris[w]); 
                         }
                         else
                         {
-                            Write(".");
+                            Write(" ");
                         }
 
                     

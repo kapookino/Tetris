@@ -15,10 +15,19 @@ namespace Tetris.Core
         private static ConcurrentQueue<(ActionKey actionKey, Action action)> _actions = new();
         private static GameState currentGameState;
 
+        static ActionQueue()
+        {
+            GameEvents.OnStateChange += SetCurrentState;
+        }
+
+        private static void SetCurrentState(GameState gameState)
+        {
+            currentGameState = gameState;
+        }
         public static void TryEnqueue(ActionKey actionKey, Action action)
         {
   
-            if (_uniqueActions.TryAdd(actionKey, true))
+            if (_uniqueActions.TryAdd(actionKey, true) )
             {
                 Enqueue(actionKey, action);
             }
@@ -41,7 +50,7 @@ namespace Tetris.Core
             {
                 GameEvents.RequestLog($"ActionQueue.ProcessAction()",$"Trying to process {action}");
                 // Ensure that a Down movement action prevents further inputs
-                if (moveDownOccurred && (action.Item1 is ActionKey.Down or ActionKey.Right or ActionKey.Left))
+                if ((moveDownOccurred || currentGameState != GameState.Movement) && (action.Item1 is ActionKey.Down or ActionKey.Right or ActionKey.Left or ActionKey.Drop))
                 {
                     GameEvents.RequestLog($"ActionQueue.ProcessAction()", $"{action} skipped");
                     continue;
