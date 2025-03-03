@@ -7,6 +7,7 @@ using System.Timers;
 using Tetris.Common;
 using Tetris.Domain;
 using Tetris.States;
+using Tetris.Render;
 
 namespace Tetris.Core
 {
@@ -51,6 +52,7 @@ namespace Tetris.Core
         public async Task RunGame()
         {
             GameEvents.RequestRenderGrid();
+            Renderer.RenderControls();
             // Task gameTask = Task.Run(() => GameLoop());
             Task inputTask = Task.Run(() => inputManager.InputLoop());
 

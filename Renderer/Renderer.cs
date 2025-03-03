@@ -88,17 +88,16 @@ namespace Tetris.Render
             SetCursorPosition(Config.renderWidth + 5, line);
             Console.Write(text);
         }
-        public void RenderControls()
+        public static void RenderControls()
         {
             // Needs refactoring to improve flexibility
-            Renderer.RenderDebug("Controls", 0);
-            Renderer.RenderDebug("Move selector: WASD", 1);
-            Renderer.RenderDebug("Move grid: Arrows", 2);
-            Renderer.RenderDebug("Select cell: Spacebar", 3);
-            Renderer.RenderDebug("Start/Pause: Enter", 4);
-            Renderer.RenderDebug("Soft Reset: R", 5);
-            Renderer.RenderDebug("Full Reset: C", 6);
-            Renderer.RenderDebug("Quit: Esc", 7);
+            Renderer.RenderDebug("Controls", 4);
+            Renderer.RenderDebug("Move left: A", 5);
+            Renderer.RenderDebug("Move right: D",6);
+            Renderer.RenderDebug("Rotate: W", 7);
+            Renderer.RenderDebug("Soft Drop: S", 8);
+            Renderer.RenderDebug("Hard Drop: Space", 9);
+
 
         }
         public void RenderGameData()
