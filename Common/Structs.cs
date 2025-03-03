@@ -24,4 +24,6 @@ namespace Tetris.Common
 
         public int[] ToArray() => new int[] { X, Y };
     }
+
+
 }

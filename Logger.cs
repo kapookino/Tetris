@@ -12,16 +12,16 @@ namespace Tetris
     {
         public Logger()
         {
-            GameEvents.OnRequestLog += Log;
+         //   GameEvents.OnRequestLog += Log;
 
-            File.WriteAllText("debug.txt", string.Empty);
-            File.AppendAllText("debug.txt","Time,Detail,Message"+ Environment.NewLine);
+       //     File.WriteAllText("debug.txt", string.Empty);
+       //     File.AppendAllText("debug.txt","Time,Detail,Message"+ Environment.NewLine);
 
         }
         private void Log(string detail, string message)
         {
             string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
-            File.AppendAllText("debug.txt",timestamp+","+ detail+","+message + Environment.NewLine);
+       //     File.AppendAllText("debug.txt",timestamp+","+ detail+","+message + Environment.NewLine);
         }
     }
 

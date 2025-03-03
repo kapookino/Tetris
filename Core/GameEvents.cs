@@ -9,7 +9,7 @@ namespace Tetris.Core
     {
         #region Game State Events
         public static event Action<GameState> OnStateChange;
-        public static event Action OnRequestPause;
+
         #endregion
 
         #region Scoring Events
@@ -41,15 +41,13 @@ namespace Tetris.Core
 
 
         #region Logging Events
-
         public static event Action<string,string> OnRequestLog;
-
         #endregion
 
 
         #region Game State Methods
         public static void RequestChangeState(GameState newState) => OnStateChange?.Invoke(newState);
-        public static void RequestPause() => OnRequestPause?.Invoke();
+        
         #endregion
 
         #region Scoring Methods

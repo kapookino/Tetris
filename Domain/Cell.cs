@@ -13,8 +13,8 @@ namespace Tetris.Domain
         public (int, int) location { get; private set; } // location on grid
         public (int, int)? renderLocation { get; private set; } // location rendered 
         public bool Active { get; private set; } = false;
-
-
+        public bool Ghost { get; private set; }
+        public char icon { get; private set; } = ' ';
         public bool renderFlag { get; private set; }
 
         public Shape? shape { get; private set; }
@@ -27,6 +27,7 @@ namespace Tetris.Domain
         public Cell(int x, int y, ConsoleColor defaultCellColor)
         {
             location = (x, y);
+            
             this.defaultCellColor = defaultCellColor;
             this.cellColor = defaultCellColor;
 
@@ -49,6 +50,19 @@ namespace Tetris.Domain
             SetRenderFlag(true);
         }
 
+        public void ActivateGhost() 
+        {
+            Ghost = true;
+            icon = 'O';
+            SetRenderFlag(true);
+        }
+
+        public void DeactivateGhost()
+        {
+            Ghost = false;
+            icon = ' ';
+            SetRenderFlag(true);
+        }
         // refactor to add cell to render to the queue
 
         public void SetRenderFlag(bool input)
@@ -61,25 +75,18 @@ namespace Tetris.Domain
             }
 
         }
-
-
-
         public bool HasShape()
         {
             return shape != null;
         }
-
         public void ClearShape()
         {
             shape = null;
-
         }
-
         public void ClearCell()
         {
             ClearShape();
             ResetCellColor();
-
         }
 
         private void ResetCellColor()
@@ -93,7 +100,6 @@ namespace Tetris.Domain
             shape = cell.shape;
             cellColor = cell.cellColor;
             SetRenderFlag(true);
-
         }
         public override bool Equals(object obj)
         {
@@ -103,11 +109,9 @@ namespace Tetris.Domain
             }
             return false;
         }
-
         public override int GetHashCode()
         {
             return location.GetHashCode();
         }
-
     }
 }

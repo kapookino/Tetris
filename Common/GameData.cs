@@ -54,7 +54,7 @@ namespace Tetris.Common
         private void CountRows(int rows)
         {
             rowsCleared += rows;
-            if(rowsCleared >= 1)
+            if(rowsCleared >= 5)
             {
                 level++;
                 rowsCleared = 0;

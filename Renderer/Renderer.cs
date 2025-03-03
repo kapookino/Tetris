@@ -79,7 +79,7 @@ namespace Tetris.Render
             // set cursor with offset to account for border
             SetCursorPosition(cell.location.Item1 + 1, cell.location.Item2 + 1);
             Console.BackgroundColor = cell.cellColor;
-            Console.Write(" ");
+            Console.Write($"{cell.icon}");
             cell.SetRenderFlag(false);
         }
         public static void RenderDebug(string text, int line)

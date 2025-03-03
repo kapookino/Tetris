@@ -29,35 +29,3 @@ InputManager inputManager = new();
 Game game = new(stateMachine, inputManager);
 await game.RunGame();
 
-public static class Config
-{
-    public const int gridWidth = 10;
-    public const int gridHeight = 20;
-    public const int renderWidth = 10;
-    public const int renderHeight = 20;
-    public const int bufferHeight = 129;
-    public const int bufferWidth = 129;
-    public const int windowWidth = 129;
-    public const int windowHeight = 129;
-    public static int[] startingCellCoordinate { get; private set; } = { 3, 0 };
-
-}
-
-public readonly struct Direction
-{
-    public int X { get; }
-    public int Y { get; }
-
-    private Direction(int x, int y)
-    {
-        X = x;
-        Y = y;
-    }
-
-    public static readonly Direction Up = new(0, -1);
-    public static readonly Direction Down = new(0, 1);
-    public static readonly Direction Left = new(-1, 0);
-    public static readonly Direction Right = new(1, 0);
-
-    public int[] ToArray() => new int[] { X, Y };
-}

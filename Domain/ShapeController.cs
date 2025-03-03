@@ -20,6 +20,7 @@ namespace Tetris.Domain
         readonly MovementHandler movementHandler;   
         private int[] spawnCoordinate;
         private List<Cell> shapeCells;
+        private List<Cell> ghostCells = new();
         private List<ShapeType> shapeBag = new();
         private int[] dropSpawnCoordinate;
 
@@ -47,6 +48,8 @@ namespace Tetris.Domain
                 GameEvents.RequestChangeState(GameState.End);
             } else
             {
+                SetDropCoordinate();
+                SetGhostCells();
                 GameEvents.RequestChangeState(GameState.Movement);
             }
 
@@ -79,7 +82,6 @@ namespace Tetris.Domain
         private void SetCurrentShape(Shape shape)
         {
             CurrentShape = shape;
-
         }
 
         private void ScoreShape(GameState gameState)
@@ -129,7 +131,8 @@ namespace Tetris.Domain
                 }
             }
 
-
+            SetDropCoordinate();
+            SetGhostCells();
         }
         
         private void Drop()
@@ -137,6 +140,35 @@ namespace Tetris.Domain
             SetDropCoordinate();
             TryMove(null, dropSpawnCoordinate);
             GameEvents.RequestChangeState(GameState.Freeze);
+        }
+
+        private void SetGhostCells()
+        {
+            List<Cell> oldGhostcells = new(ghostCells);
+            List<Cell> newGhostCells = new();
+
+            foreach (int[] coordinate in CurrentShape.coordinateList)
+            {
+                int newX = coordinate[0] + dropSpawnCoordinate[0];
+                int newY = coordinate[1] + dropSpawnCoordinate[1];
+                Cell? newCell = grid.GetCell((newX, newY));
+                if(newCell != null)
+                {
+                    newCell.ActivateGhost();
+                    newGhostCells.Add(newCell);
+                }
+            }
+
+            ghostCells = newGhostCells;
+
+            // Deactivate the prior cells
+            foreach (Cell cell in oldGhostcells)
+            {
+                if (!ghostCells.Contains(cell))
+                {
+                    cell.DeactivateGhost();
+                }
+            }
         }
         private void SetDropCoordinate()
         {
@@ -188,6 +220,9 @@ namespace Tetris.Domain
                     cell.Deactivate();
                 }
                 SetShapeCells(CurrentShape);
+                SetDropCoordinate();
+                SetGhostCells();
+
             }
         }
         private int FindNextValidShapeRotation()
