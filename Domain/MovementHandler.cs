@@ -13,10 +13,6 @@ namespace Tetris.Domain
     {
         public MovementHandler() { }
 
-        // need to rethink MoveValid to be broader use: ideally just have a generic method that gets a spawnCoordinate and sees if 
-        // the inputted shape can move there. The notion of direction would be input outside of this, and instead MoveValid will just take
-        // the spawn coordinate
-
         public bool ValidateSpawn(int[] spawnCoordinate, Shape shape, Grid grid)
         {
             foreach (int[] coordinate in shape.coordinateList)
@@ -24,7 +20,7 @@ namespace Tetris.Domain
                 int newX = spawnCoordinate[0] + coordinate[0];
                 int newY = spawnCoordinate[1] + coordinate[1];
                 Cell? newCell = grid.GetCell((newX, newY));
-                if (newX < 0 || newY < 0 || newX == Config.gridWidth || newY == Config.gridHeight || (newCell.HasShape() && newCell.shape != shape))
+                if (newX < 0 || newY < 0 || newX == Config.gameWidth || newY == Config.gameHeight || (newCell.HasShape() && newCell.shape != shape))
                 {
                     return false;   
                 }

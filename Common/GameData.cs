@@ -23,7 +23,7 @@ namespace Tetris.Common
         public GameData()
         {
             GameEvents.OnScoreClearRows += ScoreRows;
-            GameEvents.OnCountShape += IncrementShapeCounts;
+            
         }
 
         private void ScoreRows(int rows)
@@ -58,36 +58,6 @@ namespace Tetris.Common
             {
                 level++;
                 rowsCleared = 0;
-            }
-        }
-
-        private void IncrementShapeCounts(ShapeType input)
-        {
-            switch (input)
-            {
-                case ShapeType.I:
-                    IShapes++;
-                    break;
-                case ShapeType.O:
-                    OShapes++;
-                    break;
-                case ShapeType.T:
-                    TShapes++;
-                    break;
-                case ShapeType.S:
-                    SShapes++;
-                    break;
-                case ShapeType.Z:
-                    ZShapes++;
-                    break;
-                case ShapeType.J:
-                    JShapes++;
-                    break;
-                case ShapeType.L:
-                    LShapes++;
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(input), $"Unexpected ShapeType: {input}");
             }
         }
 

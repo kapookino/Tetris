@@ -31,10 +31,10 @@ namespace Tetris.Render
         {
             string tetris = "**TETRIS**";
          
-            for (int h = -1; h < Config.gridHeight; h++)
+            for (int h = -1; h < Config.gameHeight; h++)
 
             {
-                for (int w = -1; w < Config.gridWidth; w++)
+                for (int w = -1; w < Config.gameWidth; w++)
 
                 {
                     Console.BackgroundColor = ConsoleColor.Black;

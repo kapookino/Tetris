@@ -18,16 +18,20 @@ namespace Tetris.Domain
         }
         private void CreateCellsAndRows()
         {
-            for (int i = 0; i < Config.gridHeight; i++)
+            for (int i = 0; i < Config.gameHeight; i++)
             {
                 Row row = new Row(i);
                 rows.Add(row);
-                for (int j = 0; j < Config.gridWidth; j++)
+                for (int j = 0; j < Config.gameWidth; j++)
                 {
                     ConsoleColor defaultCellColor = ConsoleColor.Black;
                     Cell cell = new(j, i, defaultCellColor);
                     cells.Add((j, i), cell);
+                  //  if(i < Config.gameWidth)
+                 //   {
                     row.addCell(cell);
+
+                 //   }
                     cell.SetRenderFlag(true);
                 }
             }

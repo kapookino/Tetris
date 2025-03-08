@@ -16,16 +16,17 @@ using Tetris;
 CursorVisible = false;
 SetBufferSize(Config.bufferWidth, Config.bufferHeight);
 SetWindowSize(Config.windowWidth, Config.windowHeight);
-
 Logger logger = new();
 GameData gameData = new();
 Renderer renderer = new(gameData);
 Grid grid = new();
 RowManager rowManager = new(grid);
 MovementHandler movementHandler = new();
-ShapeController shapeController = new(grid, movementHandler);
+ShapeBag shapeBag = new();
 StateMachine stateMachine = new();
 InputManager inputManager = new();
+EnterController enterController = new();
+ShapeController shapeController = new(grid, movementHandler, shapeBag);
 Game game = new(stateMachine, inputManager);
 await game.RunGame();
 

@@ -22,12 +22,14 @@ namespace Tetris.States
             GameEvents.OnStateChange += TransitionTo;
             states = new()
         {
+            { GameState.Start, new StartState() },
             { GameState.Spawn, new SpawnState() },
             { GameState.Movement, new MovementState() },
             { GameState.Freeze, new FreezeState() },
+            { GameState.Pause, new PauseState() },
             { GameState.End, new EndState() },
         };
-            currentState = states[GameState.Spawn];
+            currentState = states[GameState.Start];
             currentState.Enter();
         }
 

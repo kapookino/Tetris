@@ -4,13 +4,13 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Tetris.Core;
-using Tetris.Common;
 
 namespace Tetris.States
 {
-    internal class SpawnState : IGameState
+    internal class PauseState : IGameState
     {
-        public SpawnState()
+
+        public PauseState()
         {
 
         }
@@ -21,15 +21,11 @@ namespace Tetris.States
         public void Update(long currentFrame)
         {
 
-            GameEvents.RequestLog("SpawnState.Enter()","SpawnState Entered");
-                GameEvents.SpawnShape();
-                
-            
         }
 
         public void Exit()
         {
-            GameEvents.RequestNextShapeDisplay();
+
         }
     }
 }

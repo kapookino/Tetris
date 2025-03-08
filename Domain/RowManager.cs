@@ -32,7 +32,7 @@ namespace Tetris.Domain
                         i++;
                     }
                 }
-                if (i == Config.gridWidth)
+                if (i == Config.gameWidth)
                 {
                     rowsToClear.Add(row);
                 }

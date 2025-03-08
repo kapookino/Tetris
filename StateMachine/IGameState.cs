@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 namespace Tetris.States
 
 {
-    public interface IGameState
+    internal interface IGameState
     {
         void Enter();
         void Update(long currentFrame);

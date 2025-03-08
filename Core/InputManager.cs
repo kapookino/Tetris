@@ -59,6 +59,9 @@ namespace Tetris.Core
                 case ConsoleKey.Spacebar:
                     ActionQueue.TryEnqueue(ActionKey.Drop, () => GameEvents.RequestDrop());
                     break;
+                case ConsoleKey.Enter:
+                    GameEvents.RequestEnter();
+                    break;
                 default:
                     break;
             }

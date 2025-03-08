@@ -8,7 +8,9 @@ namespace Tetris.Common
 {
     internal static class Config
     {
-        public const int gridWidth = 10;
+        public const int gameWidth = 10;
+        public const int gameHeight = 20;
+        public const int gridWidth = 30;
         public const int gridHeight = 20;
         public const int renderWidth = 10;
         public const int renderHeight = 20;

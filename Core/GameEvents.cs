@@ -14,7 +14,7 @@ namespace Tetris.Core
 
         #region Scoring Events
         public static event Action<int> OnScoreClearRows;
-        public static event Action<ShapeType> OnCountShape;
+ 
         #endregion
 
         #region Shape Movement Events
@@ -24,6 +24,7 @@ namespace Tetris.Core
         public static event Action OnRequestRotate;
         public static event Action OnRequestSpawnShape;
         public static event Action OnRequestDrop;
+        public static event Action OnRequestEnter;
         #endregion
 
         #region Rendering Events
@@ -52,7 +53,7 @@ namespace Tetris.Core
 
         #region Scoring Methods
         public static void ScoreClearRows(int rowsCleared) => OnScoreClearRows?.Invoke(rowsCleared);
-        public static void CountShape(ShapeType shapeType) => OnCountShape?.Invoke(shapeType);
+      
         #endregion
 
         #region Shape Movement Methods
@@ -62,6 +63,8 @@ namespace Tetris.Core
         public static void ClearShape() => OnClearShape?.Invoke();
         public static void SpawnShape() => OnRequestSpawnShape?.Invoke();
         public static void RequestDrop() => OnRequestDrop?.Invoke();
+        public static void RequestEnter() => OnRequestEnter?.Invoke();
+
         #endregion
 
         #region Rendering Methods

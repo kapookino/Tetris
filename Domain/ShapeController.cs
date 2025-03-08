@@ -21,26 +21,27 @@ namespace Tetris.Domain
         private int[] spawnCoordinate;
         private List<Cell> shapeCells;
         private List<Cell> ghostCells = new();
-        private List<ShapeType> shapeBag = new();
+        //private List<ShapeType> shapeBag = new();
+        private ShapeBag shapeBag;
         private int[] dropSpawnCoordinate;
 
-        public ShapeController(Grid grid, MovementHandler movementHandler)
+        public ShapeController(Grid grid, MovementHandler movementHandler, ShapeBag shapeBag)
         {
             this.grid = grid;
             this.movementHandler = movementHandler;
+            this.shapeBag = shapeBag;
             spawnCoordinate = Config.startingCellCoordinate;
             GameEvents.OnRequestMove += TryMove;
             GameEvents.OnRequestDrop += Drop;
             GameEvents.OnRequestRotate += TryRotateShape;
             GameEvents.OnRequestSpawnShape += SpawnShape;
-            GameEvents.OnStateChange += ScoreShape;
             GameEvents.OnStateChange += ResetSpawnCoordinate;
-            FillShapeBag();
+            
 
         }
         private void SpawnShape()
         {
-            SetCurrentShape(NewShape());
+            SetCurrentShape(shapeBag.NewShape());
             bool spawnValid = movementHandler.ValidateSpawn(spawnCoordinate, CurrentShape, grid);
             SetShapeCells(CurrentShape);
              if(!spawnValid)
@@ -54,42 +55,10 @@ namespace Tetris.Domain
             }
 
         }
-        private Shape NewShape()
-        {
-            ShapeType shapeType = shapeBag[0];
-            Shape shape = new(shapeType);
-            EmptyShapeBag(shapeType);
-            return shape;
-        }
 
-        private void FillShapeBag()
-        {
-            foreach (ShapeType shapeType in Enum.GetValues(typeof(ShapeType)))
-            {
-                shapeBag.Add(shapeType);
-                Utils.ShuffleList(shapeBag);
-            }
-        }
-
-        private void EmptyShapeBag(ShapeType shapeType)
-        {
-            shapeBag.Remove(shapeType);
-            if (shapeBag.Count == 0)
-            {
-                FillShapeBag();
-            }
-        }
         private void SetCurrentShape(Shape shape)
         {
             CurrentShape = shape;
-        }
-
-        private void ScoreShape(GameState gameState)
-        {
-            if (gameState == GameState.Freeze)
-            {
-                ActionQueue.TryEnqueue(ActionKey.Count, () => GameEvents.CountShape(CurrentShape.shapeType));
-            }
         }
 
         private void TryMove(int[] direction = null, int[] newSpawnCoordinate = null)
@@ -109,8 +78,8 @@ namespace Tetris.Domain
             List<Cell> oldShapeCells = new(shapeCells);
             if(movementHandler.ValidateSpawn(checkSpawnCoordinate, CurrentShape, grid))
             {
-               spawnCoordinate = checkSpawnCoordinate;
-               shapeCells = movementHandler.Move(checkSpawnCoordinate, grid, CurrentShape);
+                SetSpawnCoordinate(checkSpawnCoordinate);
+               shapeCells = movementHandler.Move(spawnCoordinate, grid, CurrentShape);
             }
             else
             {
@@ -135,6 +104,27 @@ namespace Tetris.Domain
             SetGhostCells();
         }
         
+        private int[] FindDropCoordinate()
+        {
+            int[] priorSpawnCoordinate = spawnCoordinate;
+            for(int i = spawnCoordinate[1] + 1; i < Config.gameHeight; i++) 
+            {
+                int[] checkSpawnCoordinate = new int[] { spawnCoordinate[0], i };
+                bool validSpawn = movementHandler.ValidateSpawn(checkSpawnCoordinate,CurrentShape,grid);
+                if (validSpawn)
+                {
+                    priorSpawnCoordinate = checkSpawnCoordinate;
+                }
+                else
+                {
+                    return priorSpawnCoordinate;
+                }
+            }
+
+            throw new Exception("No valid drop point. " +
+                "This should only be the case if the game " +
+                "should be over but should be caught earlier");
+        }
         private void Drop()
         {
             SetDropCoordinate();
@@ -175,27 +165,6 @@ namespace Tetris.Domain
             dropSpawnCoordinate = FindDropCoordinate();
         }
         // Return the int[] value corresponding to the freeze point of the active shape
-        private int[] FindDropCoordinate()
-        {
-            int[] priorSpawnCoordinate = spawnCoordinate;
-            for(int i = spawnCoordinate[1] + 1; i < Config.gridHeight; i++) 
-            {
-                int[] checkSpawnCoordinate = new int[] { spawnCoordinate[0], i };
-                bool validSpawn = movementHandler.ValidateSpawn(checkSpawnCoordinate,CurrentShape,grid);
-                if (validSpawn)
-                {
-                    priorSpawnCoordinate = checkSpawnCoordinate;
-                }
-                else
-                {
-                    return priorSpawnCoordinate;
-                }
-            }
-
-            throw new Exception("No valid drop point. " +
-                "This should only be the case if the game " +
-                "should be over but should be caught earlier");
-        }
         private void SetShapeCells(Shape shape)
         {
             shapeCells = new();
@@ -249,7 +218,7 @@ namespace Tetris.Domain
 
                         Cell? newCell = grid.GetCell((newX, newY));
 
-                        if (newX < 0 || newY < 0 || newX == Config.gridWidth || newY == Config.gridHeight || (newCell.HasShape() && newCell.shape != CurrentShape))
+                        if (newX < 0 || newY < 0 || newX == Config.gameWidth || newY == Config.gameHeight || (newCell.HasShape() && newCell.shape != CurrentShape))
                         {
                             return -1;
                         }
@@ -278,6 +247,8 @@ namespace Tetris.Domain
         {
             if (state == GameState.Spawn)
             {
+                GameEvents.RequestLog($"ResetSpawnCoordinate", $"Spawn coordinate reset to default");
+
                 SetSpawnCoordinate(Config.startingCellCoordinate);
             }
         }

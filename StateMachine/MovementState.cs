@@ -10,7 +10,7 @@ namespace Tetris.States
 {
     internal class MovementState : IGameState
     {
-        
+        long firstFrame;
         public MovementState()
         {
 
@@ -21,8 +21,12 @@ namespace Tetris.States
         }
         public void Update(long currentFrame)
         {
+            if(firstFrame == null)
+            {
+                firstFrame = currentFrame;
+            }
 
-            if (currentFrame % (32 - GameData.level*3) == 0)
+            if ((currentFrame - firstFrame) % (32 - GameData.level*3) == 0)
             {
 
                 ActionQueue.TryEnqueue(ActionKey.Down, () => GameEvents.RequestMove(Direction.Down.ToArray(),null));

@@ -4,9 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Tetris.Domain
+namespace Tetris.Render
 {
-    internal class PauseController
+    internal class RenderQueue
     {
     }
 }
