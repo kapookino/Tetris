@@ -11,11 +11,14 @@ using Tetris.States;
 using Tetris.Domain;
 using Tetris.Render;
 using Tetris.Common;
-using Tetris;
 
 CursorVisible = false;
 SetBufferSize(Config.bufferWidth, Config.bufferHeight);
 SetWindowSize(Config.windowWidth, Config.windowHeight);
+
+
+// Need to set up DI container but whatever
+
 Logger logger = new();
 GameData gameData = new();
 Renderer renderer = new(gameData);
@@ -28,5 +31,6 @@ InputManager inputManager = new();
 EnterController enterController = new();
 ShapeController shapeController = new(grid, movementHandler, shapeBag);
 Game game = new(stateMachine, inputManager);
+
 await game.RunGame();
 

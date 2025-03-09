@@ -17,10 +17,14 @@ namespace Tetris.Render
 
         private HashSet<Cell> renderCells = new();
 
+        private GameState gameState;
+
         public Renderer(GameData gameData)
         {
 
             this.gameData = gameData;
+            gameState = GameState.Start;
+            GameEvents.OnStateChange += UpdateState;
             GameEvents.OnRequestCellRender += StoreRenderCell;
             GameEvents.OnRequestRenderCells += RenderCells;
             GameEvents.OnRequestRenderGameData += RenderGameData;
@@ -82,7 +86,7 @@ namespace Tetris.Render
             Console.Write($"{cell.icon}");
             cell.SetRenderFlag(false);
         }
-        public static void RenderDebug(string text, int line)
+        public static void RenderText(string text, int line)
         {
             Console.BackgroundColor = ConsoleColor.Black;
             SetCursorPosition(Config.renderWidth + 5, line);
@@ -91,19 +95,38 @@ namespace Tetris.Render
         public static void RenderControls()
         {
             // Needs refactoring to improve flexibility
-            Renderer.RenderDebug("Controls", 4);
-            Renderer.RenderDebug("Move left: A", 5);
-            Renderer.RenderDebug("Move right: D",6);
-            Renderer.RenderDebug("Rotate: W", 7);
-            Renderer.RenderDebug("Soft Drop: S", 8);
-            Renderer.RenderDebug("Hard Drop: Space", 9);
+            Renderer.RenderText("Controls", 5);
+            Renderer.RenderText("Move left: A", 6);
+            Renderer.RenderText("Move right: D",7);
+            Renderer.RenderText("Rotate: W", 8);
+            Renderer.RenderText("Soft Drop: S", 9);
+            Renderer.RenderText("Hard Drop: Space", 10);
+            Renderer.RenderText("Pause: Enter", 11);
 
 
         }
         public void RenderGameData()
         {
-            Renderer.RenderDebug($"Level: {GameData.level}", 0);
-            Renderer.RenderDebug($"Score: {gameData.score}", 1);
+            Renderer.RenderText($"Level: {GameData.level}", 0);
+            Renderer.RenderText($"Score: {gameData.score}", 1);
+
+            if(gameState == GameState.Start)
+            {
+                Renderer.RenderText($"Press Enter to Start a New Game", 3);
+            } else if (gameState == GameState.Pause)
+            {
+                Renderer.RenderText($"GAME PAUSED - Press Enter to unpause", 3);
+            }
+            else
+            {
+                Renderer.RenderText($"                                    ", 3);
+            }
+
+        }
+
+        private void UpdateState(GameState state)
+        {
+            gameState = state; 
         }
     }
 }

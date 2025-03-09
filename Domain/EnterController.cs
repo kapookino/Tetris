@@ -8,6 +8,8 @@ using Tetris.Core;
 
 namespace Tetris.Domain
 {
+    
+    // What happens when you press "Enter". 
     internal class EnterController
     {
         GameState GameState { get; set; }

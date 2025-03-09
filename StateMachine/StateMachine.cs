@@ -12,6 +12,9 @@ using Tetris.Common;
 namespace Tetris.States
 
 {
+
+    // Controls various game states. 
+
     internal class StateMachine
     {
         public IGameState currentState { get; private set; }

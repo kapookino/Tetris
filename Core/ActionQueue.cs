@@ -49,8 +49,11 @@ namespace Tetris.Core
             while (_actions.TryDequeue(out var action))
             {
                 GameEvents.RequestLog($"ActionQueue.ProcessAction()",$"Trying to process {action}");
-                // Ensure that a Down movement action prevents further inputs
-                if ((moveDownOccurred || currentGameState != GameState.Movement) && (action.Item1 is ActionKey.Down or ActionKey.Right or ActionKey.Left or ActionKey.Drop))
+                
+                
+                
+                
+                if ((moveDownOccurred || currentGameState != GameState.Movement) && (action.Item1 is ActionKey.Down or ActionKey.Right or ActionKey.Left or ActionKey.Drop or ActionKey.Rotate))
                 {
                     GameEvents.RequestLog($"ActionQueue.ProcessAction()", $"{action} skipped");
                     continue;

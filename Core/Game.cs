@@ -35,7 +35,7 @@ namespace Tetris.Core
 
         private void OnTimedEvent(object sender, System.Timers.ElapsedEventArgs e)
         {
-            GameEvents.RequestLog("Game.OnTimedEvent()","OnTimedEvent called, signaling run of action queue and rendering");
+       
             // Process Game and Rendering
             ActionQueue.ProcessAction();
             GameEvents.RequestRenderGameData();
@@ -53,7 +53,7 @@ namespace Tetris.Core
         {
             GameEvents.RequestRenderGrid();
             Renderer.RenderControls();
-            // Task gameTask = Task.Run(() => GameLoop());
+            
             Task inputTask = Task.Run(() => inputManager.InputLoop());
 
             refreshTimer.Start();
